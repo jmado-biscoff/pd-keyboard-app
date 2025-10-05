@@ -1,0 +1,8 @@
+{
+  "seq_len": 32,
+  "features": [
+    "Press_Time",
+    "Release_Time",
+    "Hold_Time"
+  ]
+}

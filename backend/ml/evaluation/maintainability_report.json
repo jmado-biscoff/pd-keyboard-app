@@ -1,0 +1,25 @@
+{
+  "average_MI": 70.54,
+  "files": [
+    {
+      "file": "c:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_BiLSTM_CRF.py",
+      "maintainability_index": 63.91
+    },
+    {
+      "file": "c:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_maintainability.py",
+      "maintainability_index": 72.51
+    },
+    {
+      "file": "c:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_summary.py",
+      "maintainability_index": 77.29
+    },
+    {
+      "file": "c:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_TCN.py",
+      "maintainability_index": 69.49
+    },
+    {
+      "file": "c:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_Transformer.py",
+      "maintainability_index": 69.49
+    }
+  ]
+}
