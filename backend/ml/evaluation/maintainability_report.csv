@@ -1,0 +1,10 @@
+file,maintainability_index,rank
+backend\ml\evaluation\evaluation_BiLSTM_CRF.py,53.35,D
+backend\ml\evaluation\evaluation_TCN.py,52.86,D
+backend\ml\evaluation\evaluation_Transformer.py,55.85,C
+backend\ml\evaluation\evaluation_maintainability.py,63.79,C
+backend\ml\evaluation\evaluation_summary.py,63.79,C
+backend\ml\notebooks\preprocessing.py,63.28,C
+backend\ml\notebooks\train_BiLSTM_CRF.py,56.82,C
+backend\ml\notebooks\train_TCN.py,53.95,D
+backend\ml\notebooks\train_Transformer.py,57.64,C

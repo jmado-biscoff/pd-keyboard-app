@@ -1,101 +1,127 @@
-# backend/ml/evaluation/evaluation_BiLSTM_CRF.py
-import os, json, time, numpy as np
+#!/usr/bin/env python
+# coding: utf-8
+import os, json, time, numpy as np, torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import precision_recall_fscore_support
 
-# -----------------------
-# Paths & hyperparams
-# -----------------------
+# ---------- paths ----------
 def find_project_root() -> str:
-    """
-    Try current dir and up to 4 parents to locate a folder that contains 'backend/ml/dataset/raw'.
-    If not found, return current working directory.
-    """
-    cwd = os.getcwd()
-    candidates = [cwd]
-    cur = cwd
+    cwd = os.getcwd(); c=[cwd]; cur=cwd
     for _ in range(4):
         cur = os.path.dirname(cur)
-        if cur and cur not in candidates:
-            candidates.append(cur)
-    for base in candidates:
-        raw_dir = os.path.join(base, "backend", "ml", "dataset", "raw")
-        if os.path.isdir(raw_dir):
+        if cur and cur not in c: c.append(cur)
+    for base in c:
+        if os.path.isdir(os.path.join(base,"backend","ml","dataset","raw")):
             return base
     return cwd
 
-PROJECT_ROOT = find_project_root()
-DATA_DIR  = os.path.join(PROJECT_ROOT, "backend", "ml", "dataset", "processed")
-MODEL_DIR = os.path.join(PROJECT_ROOT, "backend", "ml", "models")
-EVAL_DIR  = os.path.join(PROJECT_ROOT, "backend", "ml", "evaluation")
+ROOT     = find_project_root()
+DATA_DIR = os.path.join(ROOT, "backend", "ml", "dataset", "processed")
+MODEL_DIR= os.path.join(ROOT, "backend", "ml", "models")
+EVAL_DIR = os.path.join(ROOT, "backend", "ml", "evaluation")
 os.makedirs(EVAL_DIR, exist_ok=True)
 
-ONNX_PATH = os.path.join(MODEL_DIR, "bilstm_emitter.onnx")
-PT_PATH   = os.path.join(MODEL_DIR, "bilstm_crf_model.pt")
-OUT_JSON  = os.path.join(EVAL_DIR, "bilstm_eval_from_onnx.json")
-TRAIN_JSON= os.path.join(EVAL_DIR, "bilstm_train.json")
+def must(p):
+    if not os.path.exists(p): raise FileNotFoundError(p)
+    return p
 
-SMOOTH_K = 5  # majority window
+# ---------- data ----------
+X_test = np.load(must(os.path.join(DATA_DIR,"X_test.npy"))).astype(np.float32)
+y_test = np.load(must(os.path.join(DATA_DIR,"y_test.npy"))).astype(np.int64)
+B, T, F = X_test.shape
+NUM_CLASSES = int(y_test.max() + 1)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# -----------------------
-# Load test data
-# -----------------------
-X_test = np.load(os.path.join(DATA_DIR, "X_test.npy")).astype(np.float32)
-y_test = np.load(os.path.join(DATA_DIR, "y_test.npy")).astype(np.int64)
+# ---------- model (same as training) ----------
+try:
+    from torchcrf import CRF
+except Exception as e:
+    raise RuntimeError("Install dependency: pip install pytorch-crf") from e
 
-# -----------------------
-# ONNX inference (+ temporal smoothing)
-# -----------------------
-import onnxruntime as ort
-sess = ort.InferenceSession(ONNX_PATH, providers=["CPUExecutionProvider"])
-in_name = sess.get_inputs()[0].name
+class BiLSTMEmitter(nn.Module):
+    def __init__(self, input_dim, hidden, layers, dropout, classes):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden, num_layers=layers, batch_first=True,
+                            dropout=(dropout if layers>1 else 0.0), bidirectional=True)
+        self.proj = nn.Linear(hidden*2, classes)
+    def forward(self, x):
+        y,_ = self.lstm(x); return self.proj(y)
 
-def majority_smooth(seq, k=5):
-    if k <= 1: return seq
-    r = k // 2
-    out = seq.copy()
-    for t in range(len(seq)):
-        lo, hi = max(0,t-r), min(len(seq), t+r+1)
-        w = seq[lo:hi]
-        out[t] = 1 if np.count_nonzero(w==1) >= (len(w)/2) else 0
-    return out
+class BiLSTMCRF(nn.Module):
+    def __init__(self, input_dim, classes=2, hidden=64, layers=1, dropout=0.1):
+        super().__init__()
+        self.emitter = BiLSTMEmitter(input_dim, hidden, layers, dropout, classes)
+        self.crf = CRF(classes, batch_first=True)
 
-def run_inference(session, X, batch=64, k=5):
-    preds, n_batches = [], 0
+PT_PATH = os.path.join(MODEL_DIR,"bilstm_crf_model.pt")
+model = BiLSTMCRF(F, classes=NUM_CLASSES, hidden=64, layers=1, dropout=0.1).to(DEVICE)
+model.load_state_dict(torch.load(must(PT_PATH), map_location=DEVICE))
+model.eval()
+
+# ---------- accuracy via CRF decode ----------
+loader = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=128)
+all_p, all_t = [], []
+def full_mask(bsz, t, device): return torch.ones(bsz, t, dtype=torch.bool, device=device)
+with torch.no_grad():
+    for xb,yb in loader:
+        xb = xb.to(DEVICE)
+        mask = full_mask(xb.size(0), xb.size(1), DEVICE)
+        emissions = model.emitter(xb)
+        paths = model.crf.decode(emissions, mask=mask)
+        preds = np.array([p[:xb.size(1)] for p in paths], dtype=np.int64)
+        all_p.append(preds); all_t.append(yb.numpy())
+y_pred = np.concatenate(all_p, axis=0).reshape(-1)
+y_true = np.concatenate(all_t, axis=0).reshape(-1)
+prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average="binary", zero_division=0)
+
+# ---------- latency (use ONNX emitter) ----------
+avg_ms = None
+ONNX_PATH = os.path.join(MODEL_DIR,"bilstm_emitter.onnx")
+if os.path.exists(ONNX_PATH):
+    import onnxruntime as ort
+    sess = ort.InferenceSession(ONNX_PATH, providers=["CPUExecutionProvider"])
+    in_name = sess.get_inputs()[0].name
+    _ = sess.run(None, {in_name: X_test[:8]})
+    iters = 10
     t0 = time.perf_counter()
-    for i in range(0, len(X), batch):
-        xb = X[i:i+batch]
-        logits = session.run(None, {in_name: xb})[0]  # [B,T,C]
-        pb = logits.argmax(axis=-1)                   # [B,T]
-        for row in pb:
-            preds.append(majority_smooth(row, k=k)[None, :])
-        n_batches += 1
-    t1 = time.perf_counter()
-    avg_ms = (t1 - t0) / max(1, n_batches) * 1000.0
-    return np.vstack(preds), round(avg_ms, 3)
+    for _ in range(iters):
+        _ = sess.run(None, {in_name: X_test})
+    elapsed = (time.perf_counter()-t0)/iters
+    avg_ms = (elapsed * 1000.0) / B
+else:
+    # fallback: time PyTorch emitter forward
+    with torch.no_grad():
+        iters = 5
+        t0 = time.perf_counter()
+        for _ in range(iters):
+            _ = model.emitter(torch.tensor(X_test).to(DEVICE))
+        elapsed = (time.perf_counter()-t0)/iters
+        avg_ms = (elapsed * 1000.0) / B
 
-preds, avg_ms = run_inference(sess, X_test, batch=64, k=SMOOTH_K)
-y_true = y_test.reshape(-1)
-y_pred = preds.reshape(-1)
+def size_mb(p): return round(os.path.getsize(p)/1e6,3) if os.path.exists(p) else None
 
-prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average="binary")
-
-def size_mb(p): return round(os.path.getsize(p)/1024/1024, 3) if os.path.exists(p) else None
+# ---------- merge training time ----------
 train_time = None
-if os.path.exists(TRAIN_JSON):
-    try: train_time = json.load(open(TRAIN_JSON))["training_time_seconds"]
-    except: pass
+train_json = os.path.join(EVAL_DIR, "bilstm_train.json")
+if os.path.exists(train_json):
+    with open(train_json, "r", encoding="utf-8") as f:
+        tr = json.load(f)
+    train_time = tr.get("training_time_seconds")
 
+# ---------- save ----------
+OUT_JSON = os.path.join(EVAL_DIR, "bilstm_metrics.json")
 result = {
     "precision": float(prec),
     "recall": float(rec),
     "f1_score": float(f1),
-    "avg_inference_ms_per_seq": float(avg_ms),
+    "avg_inference_ms_per_seq": float(avg_ms) if avg_ms is not None else None,
     "storage_onnx_mb": size_mb(ONNX_PATH),
     "storage_checkpoint_mb": size_mb(PT_PATH),
     "training_time_seconds": float(train_time) if train_time is not None else None,
-    "smoother_window_k": SMOOTH_K,
-    "num_sequences": int(X_test.shape[0]),
-    "seq_len": int(X_test.shape[1]),
+    "num_sequences": int(B),
+    "seq_len": int(T)
 }
-with open(OUT_JSON, "w") as f: json.dump(result, f, indent=2)
+with open(OUT_JSON, "w", encoding="utf-8") as f:
+    json.dump(result, f, indent=2)
 print(f"Saved: {OUT_JSON}")

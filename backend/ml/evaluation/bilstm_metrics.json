@@ -1,5 +1,11 @@
 {
-  "precision": 0.9118659217877095,
-  "recall": 0.9503027480204937,
-  "f1_score": 0.9306876496749914
+  "precision": 0.7604123711340206,
+  "recall": 0.5153237074988356,
+  "f1_score": 0.6143253747917824,
+  "avg_inference_ms_per_seq": 0.022475814647967017,
+  "storage_onnx_mb": 0.144,
+  "storage_checkpoint_mb": 0.148,
+  "training_time_seconds": 17.665967226028442,
+  "num_sequences": 1338,
+  "seq_len": 32
 }
