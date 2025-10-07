@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
 """
 Compare models using the JSON artifacts produced by your training/evaluation
 pipeline and save a CSV + PNG.

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
 import os, glob, json
 import numpy as np
 import pandas as pd

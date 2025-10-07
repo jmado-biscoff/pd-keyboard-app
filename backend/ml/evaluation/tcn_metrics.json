@@ -1,11 +1,11 @@
 {
-  "precision": 0.8821870955814384,
-  "recall": 0.8890079180251513,
-  "f1_score": 0.8855843734050944,
-  "avg_inference_ms_per_seq": 0.027227698057376248,
+  "precision": 0.9612361073461643,
+  "recall": 0.9928138124125059,
+  "f1_score": 0.9767698099348086,
+  "avg_inference_ms_per_seq": 0.03227130044860729,
   "storage_onnx_mb": 0.077,
   "storage_checkpoint_mb": 0.082,
-  "training_time_seconds": 7.072167158126831,
+  "training_time_seconds": 13.973607778549194,
   "num_sequences": 1338,
   "seq_len": 32
 }

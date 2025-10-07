@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
 import os, json, time, random, numpy as np, torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset

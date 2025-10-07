@@ -1,6 +1,14 @@
 {
-  "average_MI": 58.89,
+  "average_MI": 65.69,
   "files": [
+    {
+      "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\__init__.py",
+      "maintainability_index": 100.0
+    },
+    {
+      "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\compare_models.py",
+      "maintainability_index": 60.47
+    },
     {
       "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\evaluation_BiLSTM_CRF.py",
       "maintainability_index": 53.35
@@ -22,20 +30,24 @@
       "maintainability_index": 55.85
     },
     {
+      "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\evaluation\\sanity_tcn_onnx.py",
+      "maintainability_index": 100.0
+    },
+    {
       "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\notebooks\\preprocessing.py",
-      "maintainability_index": 63.28
+      "maintainability_index": 63.1
     },
     {
       "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\notebooks\\train_BiLSTM_CRF.py",
-      "maintainability_index": 56.82
+      "maintainability_index": 56.24
     },
     {
       "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\notebooks\\train_TCN.py",
-      "maintainability_index": 53.95
+      "maintainability_index": 53.24
     },
     {
       "file": "C:\\Users\\geloq\\OneDrive\\Desktop\\pd-keyboard-app\\backend\\ml\\notebooks\\train_Transformer.py",
-      "maintainability_index": 57.64
+      "maintainability_index": 56.82
     }
   ]
 }
