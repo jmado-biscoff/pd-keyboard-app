@@ -1,0 +1,27 @@
+<annotation>
+	<folder></folder>
+	<filename>sonstiges60_jpg.rf.cebbe13a4c335577b28f960ae18afd8e.jpg</filename>
+	<path>sonstiges60_jpg.rf.cebbe13a4c335577b28f960ae18afd8e.jpg</path>
+	<source>
+		<database>roboflow.ai</database>
+	</source>
+	<size>
+		<width>400</width>
+		<height>400</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>keyboard</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<occluded>0</occluded>
+		<bndbox>
+			<xmin>21</xmin>
+			<xmax>294</xmax>
+			<ymin>144</ymin>
+			<ymax>319</ymax>
+		</bndbox>
+	</object>
+</annotation>

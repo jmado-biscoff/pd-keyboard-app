@@ -1,0 +1,27 @@
+<annotation>
+	<folder></folder>
+	<filename>keychron3_jpg.rf.2a15b79d0198f18a03c053d49d6cb1ca.jpg</filename>
+	<path>keychron3_jpg.rf.2a15b79d0198f18a03c053d49d6cb1ca.jpg</path>
+	<source>
+		<database>roboflow.ai</database>
+	</source>
+	<size>
+		<width>960</width>
+		<height>720</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>keyboard</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<occluded>0</occluded>
+		<bndbox>
+			<xmin>28</xmin>
+			<xmax>853</xmax>
+			<ymin>252</ymin>
+			<ymax>517</ymax>
+		</bndbox>
+	</object>
+</annotation>
