@@ -190,6 +190,8 @@ def main():
     train_dataset = VOCDataset(train_folder, class_map, transforms=get_train_transforms())
     val_dataset = VOCDataset(val_folder, class_map, transforms=get_valid_transforms())
 
+    print(f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}")
+
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, collate_fn=collate_fn)
 
@@ -202,29 +204,47 @@ def main():
     # ===============================
     # SAVE MODELS (PyTorch + ONNX)
     # ===============================
-    print("Saving trained models...")
+    print("Saving trained models....")
 
+    #Save paths under existing models/ folder
     pth_path = os.path.join(models_dir, "efficientdet_keyboard.pth")
     onnx_path = os.path.join(models_dir, "efficientdet_keyboard.onnx")
 
-    # Save PyTorch weights
+    #Save PyTorch weights
     torch.save(model.state_dict(), pth_path)
-    print(f"Saved PyTorch weights: {pth_path}")
+    print(f"✅ Saved PyTorch model to {pth_path}")
 
-    # Export to ONNX
-    dummy_input = torch.randn(1, 3, 512, 512).to(device)
+    # ===============================
+    # Export Inference Version
+    # ===============================
+    print("exporting ONXX model...")
+    
+    inference_model = model.model
+    inference_model.eval()
+    inference_model = inference_model.to("cpu")
+
+    dummy_input = torch.randn(1, 3, 512, 512)
+
+    #Export to ONNX
     torch.onnx.export(
-        model.module if hasattr(model, "module") else model,
+        inference_model,
         dummy_input,
         onnx_path,
-        input_names=["input"],
-        output_names=["output"],
-        opset_version=12,
-        do_constant_folding=True
+        export_params=True, 
+        opset_version=11,
+        do_constant_folding=True,
+        input_names=['input'],
+        output_names=['boxes', 'scores', 'labels'],
+        dynamic_axes={
+            'input': {0: 'batch_size', 2: 'height', 3: 'width'},
+            'boxes': {0: 'batch_size'},
+            'scores': {0: 'batch_size'},
+            'labels': {0: 'batch_size'},
+        }
     )
 
-    print(f"Exported ONNX model: {onnx_path}")
-    print("Training and export complete!")
+    print(f"✅ Saved ONNX model to {onnx_path}")
+    print("Training complete! Models saved in 'models/' directory.")
 
 if __name__ == "__main__":
     main()
