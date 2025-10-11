@@ -27,7 +27,6 @@ project_root = find_project_root()
 dataset_root = os.path.join(project_root, "dataset", "raw")
 models_dir = os.path.join(project_root, "models")
 
-# Create models folder if not existing
 os.makedirs(models_dir, exist_ok=True)
 
 train_folder = os.path.join(dataset_root, "train")
@@ -53,7 +52,6 @@ class VOCDataset(Dataset):
         boxes, labels = [], []
         tree = ET.parse(xml_path)
         root = tree.getroot()
-
         for obj in root.findall("object"):
             label = obj.find("name").text
             label_id = self.class_map.get(label, 0)
@@ -76,7 +74,6 @@ class VOCDataset(Dataset):
 
         boxes, labels = self.parse_xml(xml_path)
 
-        # Skip corrupted images or invalid XMLs
         if image is None or len(boxes) == 0:
             boxes = [[0, 0, 1, 1]]
             labels = [0]
@@ -95,7 +92,6 @@ class VOCDataset(Dataset):
             boxes = torch.tensor(boxes, dtype=torch.float32)
             labels = torch.tensor(labels, dtype=torch.int64)
 
-        # ✅ Ensure boxes always have correct shape [N, 4]
         if boxes.ndim != 2 or boxes.shape[1] != 4:
             print(f"Invalid box shape {boxes.shape} in {img_name}, fixing...")
             boxes = torch.tensor([[0, 0, 1, 1]], dtype=torch.float32)
@@ -148,19 +144,25 @@ def collate_fn(batch):
 # ===============================
 # MODEL SETUP
 # ===============================
-def create_model(num_classes):
+def create_model(num_classes, freeze_backbone=True):
     config = get_efficientdet_config('tf_efficientdet_d0')
     config.num_classes = num_classes
     config.image_size = (512, 512)
     net = EfficientDet(config, pretrained_backbone=True)
     net.class_net = HeadNet(config, num_outputs=config.num_classes)
     model = DetBenchTrain(net, config)
+
+    if freeze_backbone:
+        for name, param in model.named_parameters():
+            if "backbone" in name:
+                param.requires_grad = False
+        print("🔒 Backbone frozen for fine-tuning stage 1.")
     return model
 
 # ===============================
 # TRAINING LOOP
 # ===============================
-def train_model(model, dataloader, optimizer, device, num_epochs=10):
+def train_model(model, dataloader, optimizer, device, num_epochs=10, scheduler=None):
     model.train()
     for epoch in range(num_epochs):
         running_loss = 0.0
@@ -178,7 +180,10 @@ def train_model(model, dataloader, optimizer, device, num_epochs=10):
             running_loss += loss["loss"].item()
             pbar.set_postfix(loss=loss["loss"].item())
 
-        print(f"✅ Epoch {epoch+1} Average Loss: {running_loss/len(dataloader):.4f}")
+        avg_loss = running_loss / len(dataloader)
+        print(f"✅ Epoch {epoch+1}/{num_epochs} Average Loss: {avg_loss:.4f}")
+        if scheduler:
+            scheduler.step()
 
 # ===============================
 # MAIN EXECUTION
@@ -195,56 +200,52 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, collate_fn=collate_fn)
 
-    model = create_model(num_classes).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+    # ===============================
+    # STAGE 1: Fine-tune heads only
+    # ===============================
+    model = create_model(num_classes, freeze_backbone=True).to(device)
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4, weight_decay=1e-4)
+    print("⚙️ Stage 1: Fine-tuning classification and box heads (5 epochs)...")
+    train_model(model, train_loader, optimizer, device, num_epochs=5)
 
-    # Train the model
-    train_model(model, train_loader, optimizer, device, num_epochs=10)
+    # ===============================
+    # STAGE 2: Full model training
+    # ===============================
+    for param in model.parameters():
+        param.requires_grad = True
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
+    print("🚀 Stage 2: Training full model (80 epochs)...")
+    train_model(model, train_loader, optimizer, device, num_epochs=80, scheduler=scheduler)
 
     # ===============================
     # SAVE MODELS (PyTorch + ONNX)
     # ===============================
-    print("Saving trained models....")
-
-    #Save paths under existing models/ folder
+    print("💾 Saving trained models...")
     pth_path = os.path.join(models_dir, "efficientdet_keyboard.pth")
     onnx_path = os.path.join(models_dir, "efficientdet_keyboard.onnx")
-
-    #Save PyTorch weights
     torch.save(model.state_dict(), pth_path)
     print(f"✅ Saved PyTorch model to {pth_path}")
 
-    # ===============================
-    # Export Inference Version
-    # ===============================
-    print("exporting ONXX model...")
-    
+    print("📦 Exporting ONNX model...")
     inference_model = model.model
-    inference_model.eval()
-    inference_model = inference_model.to("cpu")
-
+    inference_model.eval().to("cpu")
     dummy_input = torch.randn(1, 3, 512, 512)
-
-    #Export to ONNX
     torch.onnx.export(
         inference_model,
         dummy_input,
         onnx_path,
-        export_params=True, 
+        export_params=True,
         opset_version=11,
         do_constant_folding=True,
         input_names=['input'],
         output_names=['boxes', 'scores', 'labels'],
-        dynamic_axes={
-            'input': {0: 'batch_size', 2: 'height', 3: 'width'},
-            'boxes': {0: 'batch_size'},
-            'scores': {0: 'batch_size'},
-            'labels': {0: 'batch_size'},
-        }
+        dynamic_axes={'input': {0: 'batch_size', 2: 'height', 3: 'width'},
+                      'boxes': {0: 'batch_size'}, 'scores': {0: 'batch_size'}, 'labels': {0: 'batch_size'}}
     )
-
     print(f"✅ Saved ONNX model to {onnx_path}")
-    print("Training complete! Models saved in 'models/' directory.")
+    print("🎉 Training complete! Models saved in 'models/' directory.")
 
 if __name__ == "__main__":
     main()
