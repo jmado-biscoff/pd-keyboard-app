@@ -14,10 +14,13 @@ from tqdm import tqdm
 # ===============================
 def find_project_root() -> str:
     """Automatically find the dataset root path"""
-    cwd = os.getcwd(); c = [cwd]; cur = cwd
+    cwd = os.getcwd()
+    c = [cwd]
+    cur = cwd
     for _ in range(4):
         cur = os.path.dirname(cur)
-        if cur and cur not in c: c.append(cur)
+        if cur and cur not in c:
+            c.append(cur)
     for base in c:
         if os.path.isdir(os.path.join(base, "backend", "ml", "dataset", "raw")):
             return os.path.join(base, "backend", "ml")
@@ -50,6 +53,8 @@ class VOCDataset(Dataset):
 
     def parse_xml(self, xml_path):
         boxes, labels = [], []
+        if not os.path.exists(xml_path):
+            return boxes, labels
         tree = ET.parse(xml_path)
         root = tree.getroot()
         for obj in root.findall("object"):
@@ -70,32 +75,39 @@ class VOCDataset(Dataset):
         xml_path = os.path.splitext(img_path)[0] + ".xml"
 
         image = cv2.imread(img_path)
+        if image is None:
+            raise FileNotFoundError(f"Image not found: {img_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         boxes, labels = self.parse_xml(xml_path)
 
-        if image is None or len(boxes) == 0:
-            boxes = [[0, 0, 1, 1]]
-            labels = [0]
-
-        if self.transforms:
-            try:
-                transformed = self.transforms(image=image, bboxes=boxes, class_labels=labels)
-                image = transformed["image"]
-                boxes = torch.tensor(transformed["bboxes"], dtype=torch.float32)
-                labels = torch.tensor(transformed["class_labels"], dtype=torch.int64)
-            except Exception as e:
-                print(f"Skipping {img_name} due to transform error: {e}")
-                boxes = torch.tensor([[0, 0, 1, 1]], dtype=torch.float32)
-                labels = torch.tensor([0], dtype=torch.int64)
+        # ✅ Proper empty tensors
+        if len(boxes) == 0:
+            boxes = torch.zeros((0, 4), dtype=torch.float32)
+            labels = torch.zeros((0,), dtype=torch.int64)
         else:
             boxes = torch.tensor(boxes, dtype=torch.float32)
             labels = torch.tensor(labels, dtype=torch.int64)
 
+        if self.transforms:
+            transformed = self.transforms(
+                image=image,
+                bboxes=boxes.tolist(),
+                class_labels=labels.tolist()
+            )
+            image = transformed["image"]
+            if len(transformed["bboxes"]) == 0:
+                boxes = torch.zeros((0, 4), dtype=torch.float32)
+                labels = torch.zeros((0,), dtype=torch.int64)
+            else:
+                boxes = torch.tensor(transformed["bboxes"], dtype=torch.float32)
+                labels = torch.tensor(transformed["class_labels"], dtype=torch.int64)
+
+        # ✅ Sanity check
         if boxes.ndim != 2 or boxes.shape[1] != 4:
-            print(f"Invalid box shape {boxes.shape} in {img_name}, fixing...")
-            boxes = torch.tensor([[0, 0, 1, 1]], dtype=torch.float32)
-            labels = torch.tensor([0], dtype=torch.int64)
+            print(f"⚠️ Fixing invalid box shape {boxes.shape} in {img_name}")
+            boxes = torch.zeros((0, 4), dtype=torch.float32)
+            labels = torch.zeros((0,), dtype=torch.int64)
 
         target = {"boxes": boxes, "labels": labels}
         return image, target
@@ -121,7 +133,8 @@ def get_train_transforms():
         format='pascal_voc',
         label_fields=['class_labels'],
         min_visibility=0.1,
-        clip=True
+        clip=True,
+        check_each_transform=False
     ))
 
 def get_valid_transforms():
@@ -132,7 +145,8 @@ def get_valid_transforms():
     ], bbox_params=A.BboxParams(
         format='pascal_voc',
         label_fields=['class_labels'],
-        clip=True
+        clip=True,
+        check_each_transform=False
     ))
 
 # ===============================
@@ -162,26 +176,56 @@ def create_model(num_classes, freeze_backbone=True):
 # ===============================
 # TRAINING LOOP
 # ===============================
-def train_model(model, dataloader, optimizer, device, num_epochs=10, scheduler=None):
-    model.train()
+def train_model(model, train_loader, val_loader, optimizer, device, num_epochs=10, scheduler=None):
     for epoch in range(num_epochs):
+        model.train()
         running_loss = 0.0
-        pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]")
         for images, targets in pbar:
-            images = torch.stack([img for img in images]).to(device)
+            images = torch.stack(images).to(device)
+
+            # ✅ Batch target dict format (old effdet API)
             boxes = [t["boxes"].to(device) for t in targets]
             labels = [t["labels"].to(device) for t in targets]
+            target_dict = {
+                "bbox": boxes,
+                "cls": labels,
+                "img_size": torch.tensor([512, 512], dtype=torch.float32, device=device),
+                "img_scale": torch.tensor(1.0, dtype=torch.float32, device=device),
+            }
 
             optimizer.zero_grad()
-            loss = model(images, {"bbox": boxes, "cls": labels})
+            loss = model(images, target_dict)
             loss["loss"].backward()
             optimizer.step()
 
             running_loss += loss["loss"].item()
             pbar.set_postfix(loss=loss["loss"].item())
 
-        avg_loss = running_loss / len(dataloader)
-        print(f"✅ Epoch {epoch+1}/{num_epochs} Average Loss: {avg_loss:.4f}")
+        avg_train_loss = running_loss / len(train_loader)
+
+        # =======================
+        # Validation
+        # =======================
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for images, targets in val_loader:
+                images = torch.stack(images).to(device)
+                boxes = [t["boxes"].to(device) for t in targets]
+                labels = [t["labels"].to(device) for t in targets]
+                target_dict = {
+                    "bbox": boxes,
+                    "cls": labels,
+                    "img_size": torch.tensor([512, 512], dtype=torch.float32, device=device),
+                    "img_scale": torch.tensor(1.0, dtype=torch.float32, device=device),
+                }
+                loss = model(images, target_dict)
+                val_loss += loss["loss"].item()
+
+        avg_val_loss = val_loss / len(val_loader)
+        print(f"✅ Epoch {epoch+1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
         if scheduler:
             scheduler.step()
 
@@ -206,7 +250,7 @@ def main():
     model = create_model(num_classes, freeze_backbone=True).to(device)
     optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4, weight_decay=1e-4)
     print("⚙️ Stage 1: Fine-tuning classification and box heads (5 epochs)...")
-    train_model(model, train_loader, optimizer, device, num_epochs=5)
+    train_model(model, train_loader, val_loader, optimizer, device, num_epochs=5)
 
     # ===============================
     # STAGE 2: Full model training
@@ -217,7 +261,7 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
     print("🚀 Stage 2: Training full model (80 epochs)...")
-    train_model(model, train_loader, optimizer, device, num_epochs=80, scheduler=scheduler)
+    train_model(model, train_loader, val_loader, optimizer, device, num_epochs=80, scheduler=scheduler)
 
     # ===============================
     # SAVE MODELS (PyTorch + ONNX)
