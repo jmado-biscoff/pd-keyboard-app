@@ -24,19 +24,19 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Auth />} />
-          
+
           {/* Student Routes */}
           <Route path="/student/dashboard" element={<StudentDashboard />} />
           <Route path="/student/learn" element={<Learn />} />
           <Route path="/student/play" element={<Play />} />
           <Route path="/student/play/session" element={<PlaySession />} />
           <Route path="/student/settings" element={<StudentSettings />} />
-          
+
           {/* Teacher Routes */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route path="/teacher/classroom" element={<Classroom />} />
           <Route path="/teacher/settings" element={<TeacherSettings />} />
-          
+
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
