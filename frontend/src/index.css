@@ -1,68 +1,125 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
+@layer base {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    /* Sunset Pixel Art Color Palette */
+    --background: 40 58% 87%;
+    --foreground: 25 35% 25%;
+
+    --card: 42 65% 92%;
+    --card-foreground: 25 35% 25%;
+
+    --popover: 42 65% 92%;
+    --popover-foreground: 25 35% 25%;
+
+    /* Warm Orange - Primary */
+    --primary: 24 95% 63%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Deep Purple - Secondary */
+    --secondary: 320 45% 45%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Soft Pink - Muted */
+    --muted: 340 65% 85%;
+    --muted-foreground: 25 35% 35%;
+
+    /* Vibrant Yellow - Accent */
+    --accent: 48 98% 62%;
+    --accent-foreground: 25 35% 25%;
+
+    /* Error Red */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Pixel borders */
+    --border: 25 30% 30%;
+    --input: 42 50% 88%;
+    --ring: 24 95% 63%;
+
+    --radius: 0rem;
+
+    /* Gradients */
+    --gradient-sunset: linear-gradient(135deg, hsl(24 95% 63%) 0%, hsl(340 75% 65%) 50%, hsl(280 65% 55%) 100%);
+    --gradient-warm: linear-gradient(180deg, hsl(48 98% 62%) 0%, hsl(24 95% 63%) 100%);
+    
+    /* Shadows */
+    --shadow-pixel: 4px 4px 0px hsl(var(--border));
+    --shadow-pixel-lg: 6px 6px 0px hsl(var(--border));
+    
+    --sidebar-background: 40 58% 87%;
+    --sidebar-foreground: 25 35% 25%;
+    --sidebar-primary: 24 95% 63%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 48 98% 62%;
+    --sidebar-accent-foreground: 25 35% 25%;
+    --sidebar-border: 25 30% 30%;
+    --sidebar-ring: 24 95% 63%;
   }
-  a:hover {
-    color: #747bff;
+
+  .dark {
+    --background: 240 25% 15%;
+    --foreground: 40 58% 87%;
+    --card: 240 20% 18%;
+    --card-foreground: 40 58% 87%;
+    --popover: 240 20% 18%;
+    --popover-foreground: 40 58% 87%;
+    --primary: 24 95% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 320 45% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 15% 25%;
+    --muted-foreground: 40 40% 70%;
+    --accent: 48 98% 62%;
+    --accent-foreground: 25 35% 25%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 25 30% 30%;
+    --input: 240 15% 25%;
+    --ring: 24 95% 63%;
+    --sidebar-background: 240 25% 15%;
+    --sidebar-foreground: 40 58% 87%;
+    --sidebar-primary: 24 95% 63%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 48 98% 62%;
+    --sidebar-accent-foreground: 25 35% 25%;
+    --sidebar-border: 25 30% 30%;
+    --sidebar-ring: 24 95% 63%;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Press Start 2P', cursive, system-ui;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+}
+
+@layer utilities {
+  .pixel-border {
+    border: 3px solid hsl(var(--border));
+    box-shadow: var(--shadow-pixel);
+  }
+  
+  .pixel-border-lg {
+    border: 4px solid hsl(var(--border));
+    box-shadow: var(--shadow-pixel-lg);
+  }
+  
+  .text-pixel {
+    font-family: 'Press Start 2P', cursive;
+    text-rendering: optimizeLegibility;
   }
 }
