@@ -2,9 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ============================
+   🌇 Pixel Art Design System
+   All colors use HSL variables.
+   ============================ */
 
 @layer base {
   :root {
@@ -38,7 +39,7 @@ All colors MUST be HSL.
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Pixel borders */
+    /* Pixel Borders & Shadows */
     --border: 25 30% 30%;
     --input: 42 50% 88%;
     --ring: 24 95% 63%;
@@ -62,6 +63,7 @@ All colors MUST be HSL.
     --shadow-pixel: 4px 4px 0px hsl(var(--border));
     --shadow-pixel-lg: 6px 6px 0px hsl(var(--border));
 
+    /* Sidebar */
     --sidebar-background: 40 58% 87%;
     --sidebar-foreground: 25 35% 25%;
     --sidebar-primary: 24 95% 63%;
@@ -75,23 +77,33 @@ All colors MUST be HSL.
   .dark {
     --background: 240 25% 15%;
     --foreground: 40 58% 87%;
+
     --card: 240 20% 18%;
     --card-foreground: 40 58% 87%;
+
     --popover: 240 20% 18%;
     --popover-foreground: 40 58% 87%;
+
     --primary: 24 95% 63%;
     --primary-foreground: 0 0% 100%;
+
     --secondary: 320 45% 45%;
     --secondary-foreground: 0 0% 100%;
+
     --muted: 240 15% 25%;
     --muted-foreground: 40 40% 70%;
+
     --accent: 48 98% 62%;
     --accent-foreground: 25 35% 25%;
+
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+
     --border: 25 30% 30%;
     --input: 240 15% 25%;
     --ring: 24 95% 63%;
+
+    /* Sidebar */
     --sidebar-background: 240 25% 15%;
     --sidebar-foreground: 40 58% 87%;
     --sidebar-primary: 24 95% 63%;
@@ -103,9 +115,14 @@ All colors MUST be HSL.
   }
 }
 
+/* ============================
+   🧱 Base Styles
+   ============================ */
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(
+      var(--border)
+    ); /* ✅ Fixed: no invalid @apply border-border */
   }
 
   body {
@@ -116,6 +133,9 @@ All colors MUST be HSL.
   }
 }
 
+/* ============================
+   🎨 Utility Classes
+   ============================ */
 @layer utilities {
   .pixel-border {
     border: 3px solid hsl(var(--border));
