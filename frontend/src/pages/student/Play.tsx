@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
 import { ArrowLeft, Trophy, Clock } from "lucide-react";
+import bgVideo from "@/assets/bg1.mp4";
 
 export default function Play() {
   const navigate = useNavigate();
@@ -28,115 +29,144 @@ export default function Play() {
   };
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-12">
-          <PixelButton variant="secondary" onClick={() => navigate("/student/dashboard")}>
-            <ArrowLeft size={20} />
-          </PixelButton>
-          <Logo />
-        </div>
+    <div className="relative min-h-screen overflow-hidden">
+      {/* 🔹 Background video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute top-0 left-0 w-full h-full object-cover -z-10"
+      >
+        <source src={bgVideo} type="video/mp4" />
+      </video>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-8">
-          {/* Session Setup */}
-          <PixelCard variant="orange" className="text-white">
-            <h2 className="font-pixel text-xl mb-6">Start Session</h2>
+      {/* 🔹 Optional dark overlay */}
+      <div className="absolute inset-0 bg-black/40 -z-10" />
 
-            <div className="space-y-6">
-              <div>
-                <label className="block font-pixel text-xs mb-3">Session Type</label>
-                <div className="flex gap-2">
-                  <PixelButton
-                    variant={sessionType === "practice" ? "accent" : "primary"}
-                    onClick={() => setSessionType("practice")}
-                    className="flex-1"
-                  >
-                    Practice
-                  </PixelButton>
-                  <PixelButton
-                    variant={sessionType === "evaluated" ? "accent" : "primary"}
-                    onClick={() => setSessionType("evaluated")}
-                    className="flex-1"
-                  >
-                    Evaluated
-                  </PixelButton>
-                </div>
-                <p className="font-pixel text-[10px] mt-2 opacity-90">
-                  {sessionType === "practice" ? "Not graded, for practice" : "Graded session"}
-                </p>
-              </div>
+      {/* 🔹 Page content */}
+      <div className="relative z-10 p-8 min-h-screen text-white">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-12">
+            <PixelButton variant="secondary" onClick={() => navigate("/student/dashboard")}>
+              <ArrowLeft size={20} />
+            </PixelButton>
+            <Logo />
+          </div>
 
-              <div>
-                <label className="block font-pixel text-xs mb-3">Select Level</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {levels.map((lvl) => (
+          <div className="grid lg:grid-cols-2 gap-8 mb-8">
+            {/* 🔸 Session Setup */}
+            <PixelCard variant="orange" className="text-white bg-black/60 border-[3px] border-orange-400 backdrop-blur-sm">
+              <h2 className="font-pixel text-xl mb-6">Start Session</h2>
+
+              <div className="space-y-6">
+                {/* Session Type */}
+                <div>
+                  <label className="block font-pixel text-xs mb-3">Session Type</label>
+                  <div className="flex gap-2">
                     <PixelButton
-                      key={lvl.id}
-                      variant={level === lvl.id ? "accent" : "primary"}
-                      onClick={() => setLevel(lvl.id)}
-                      size="sm"
+                      variant={sessionType === "practice" ? "accent" : "primary"}
+                      onClick={() => setSessionType("practice")}
+                      className="flex-1"
                     >
-                      {lvl.name}
+                      Practice
                     </PixelButton>
-                  ))}
-                </div>
-                <p className="font-pixel text-[10px] mt-2 opacity-90">
-                  {levels.find((l) => l.id === level)?.description}
-                </p>
-              </div>
-
-              <PixelButton variant="accent" onClick={startSession} className="w-full" size="lg">
-                Start Typing!
-              </PixelButton>
-            </div>
-          </PixelCard>
-
-          {/* Stats Preview */}
-          <PixelCard variant="purple" className="text-white">
-            <h2 className="font-pixel text-xl mb-6">Your Stats</h2>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Trophy size={32} />
-                <div>
-                  <p className="font-pixel text-xs opacity-90">Best WPM</p>
-                  <p className="font-pixel text-2xl">25</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <Clock size={32} />
-                <div>
-                  <p className="font-pixel text-xs opacity-90">Sessions</p>
-                  <p className="font-pixel text-2xl">{history.length}</p>
-                </div>
-              </div>
-            </div>
-          </PixelCard>
-        </div>
-
-        {/* History */}
-        <PixelCard>
-          <h2 className="font-pixel text-xl mb-6">Recent Sessions</h2>
-          <div className="space-y-3">
-            {history.map((session, idx) => (
-              <div
-                key={idx}
-                className="pixel-border p-4 bg-muted flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-pixel text-sm">Level {session.level}</p>
-                  <p className="font-pixel text-xs text-muted-foreground">{session.date}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-pixel text-sm">{session.wpm} WPM</p>
-                  <p className="font-pixel text-xs text-muted-foreground">
-                    {session.accuracy}% Accuracy
+                    <PixelButton
+                      variant={sessionType === "evaluated" ? "accent" : "primary"}
+                      onClick={() => setSessionType("evaluated")}
+                      className="flex-1"
+                    >
+                      Evaluated
+                    </PixelButton>
+                  </div>
+                  <p className="font-pixel text-[10px] mt-2 opacity-90">
+                    {sessionType === "practice"
+                      ? "Not graded, perfect for drills"
+                      : "Graded and recorded for progress"}
                   </p>
                 </div>
-                <div className="font-pixel text-xl text-primary">{session.grade}</div>
+
+                {/* Level Selection */}
+                <div>
+                  <label className="block font-pixel text-xs mb-3">Select Level</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {levels.map((lvl) => (
+                      <PixelButton
+                        key={lvl.id}
+                        variant={level === lvl.id ? "accent" : "primary"}
+                        onClick={() => setLevel(lvl.id)}
+                        size="sm"
+                      >
+                        {lvl.name}
+                      </PixelButton>
+                    ))}
+                  </div>
+                  <p className="font-pixel text-[10px] mt-2 opacity-90">
+                    {levels.find((l) => l.id === level)?.description}
+                  </p>
+                </div>
+
+                <PixelButton
+                  variant="accent"
+                  onClick={startSession}
+                  className="w-full"
+                  size="lg"
+                >
+                  Start Typing!
+                </PixelButton>
               </div>
-            ))}
+            </PixelCard>
+
+            {/* 🔸 Stats Preview */}
+            <PixelCard variant="purple" className="text-white bg-black/60 border-[3px] border-purple-400 backdrop-blur-sm">
+              <h2 className="font-pixel text-xl mb-6">Your Stats</h2>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Trophy size={32} className="text-yellow-300" />
+                  <div>
+                    <p className="font-pixel text-xs opacity-90">Best WPM</p>
+                    <p className="font-pixel text-2xl">25</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Clock size={32} className="text-blue-300" />
+                  <div>
+                    <p className="font-pixel text-xs opacity-90">Sessions</p>
+                    <p className="font-pixel text-2xl">{history.length}</p>
+                  </div>
+                </div>
+              </div>
+            </PixelCard>
           </div>
-        </PixelCard>
+
+          {/* 🔸 Recent Sessions History */}
+          <PixelCard className="bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
+            <h2 className="font-pixel text-xl mb-6 text-yellow-200">Recent Sessions</h2>
+            <div className="space-y-3">
+              {history.map((session, idx) => (
+                <div
+                  key={idx}
+                  className="pixel-border p-4 bg-black/50 flex items-center justify-between text-white border border-yellow-300 rounded-md"
+                >
+                  <div>
+                    <p className="font-pixel text-sm">Level {session.level}</p>
+                    <p className="font-pixel text-xs opacity-80">{session.date}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-pixel text-sm">{session.wpm} WPM</p>
+                    <p className="font-pixel text-xs opacity-80">
+                      {session.accuracy}% Accuracy
+                    </p>
+                  </div>
+                  <div className="font-pixel text-xl text-yellow-400">
+                    {session.grade}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </PixelCard>
+        </div>
       </div>
     </div>
   );

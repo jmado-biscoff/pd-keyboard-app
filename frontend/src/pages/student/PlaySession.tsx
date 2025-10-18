@@ -70,7 +70,7 @@ export default function PlaySession() {
             <p className="font-pixel text-xs mb-1">Incorrect</p>
             <p className="font-pixel text-2xl">{incorrectFingers}</p>
           </PixelCard>
-          <PixelCard variant="purple" className="text-white">
+          <PixelCard variant="red" className="text-white">
             <p className="font-pixel text-xs mb-1">Words</p>
             <p className="font-pixel text-2xl">{userInput.trim().split(" ").length}</p>
           </PixelCard>
