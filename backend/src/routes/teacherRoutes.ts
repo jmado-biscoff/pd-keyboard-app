@@ -1,6 +1,7 @@
-//comment
 import express from "express";
 import { verifyToken, AuthRequest } from "../../middleware/authMiddleware";
+import Classroom from "../models/Classroom";
+import { generateClassCode } from "../utils/generateClassCode";
 
 const teacherRoutes = express.Router();
 
@@ -20,5 +21,241 @@ teacherRoutes.get("/dashboard", verifyToken, (req: AuthRequest, res) => {
     info: "This is your teacher dashboard.",
   });
 });
+
+/**
+ * @route POST /api/teacher/create-classroom
+ * @desc Create a new classroom with unique code
+ */
+teacherRoutes.post(
+  "/create-classroom",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ message: "Classroom name is required." });
+      }
+
+      const code = generateClassCode();
+
+      const classroom = await Classroom.create({
+        name,
+        code,
+        teacher: user.id, // teacher ID from JWT
+        students: [],
+        pendingRequests: [], // 👈 ensure new field exists when created
+      });
+
+      res.status(201).json({
+        message: "Classroom created successfully!",
+        classroom,
+      });
+    } catch (error) {
+      console.error("Error creating classroom:", error);
+      res.status(500).json({ message: "Failed to create classroom." });
+    }
+  }
+);
+
+/**
+ * @route GET /api/teacher/my-classrooms
+ * @desc Get all classrooms created by the teacher
+ */
+teacherRoutes.get(
+  "/my-classrooms",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const classrooms = await Classroom.find({ teacher: user.id });
+      res.json(classrooms);
+    } catch (error) {
+      console.error("Error fetching classrooms:", error);
+      res.status(500).json({ message: "Failed to fetch classrooms." });
+    }
+  }
+);
+
+/**
+ * @route GET /api/teacher/classroom/:id/students
+ * @desc Returns all students enrolled in a specific classroom
+ */
+teacherRoutes.get(
+  "/classroom/:id/students",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const { id } = req.params;
+
+      // Find the classroom and populate student details
+      const classroom = await Classroom.findById(id).populate(
+        "students",
+        "name email"
+      );
+
+      if (!classroom) {
+        return res.status(404).json({ message: "Classroom not found" });
+      }
+
+      res.status(200).json({
+        name: classroom.name,
+        code: classroom.code,
+        students: classroom.students,
+      });
+    } catch (error) {
+      console.error("❌ Error fetching classroom students:", error);
+      res.status(500).json({ message: "Failed to load classroom students" });
+    }
+  }
+);
+
+/**
+ * @route GET /api/teacher/classroom/:id/requests
+ * @desc Get pending join requests for a classroom
+ */
+teacherRoutes.get(
+  "/classroom/:id/requests",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const classroom = await Classroom.findById(req.params.id).populate(
+        "pendingRequests",
+        "name email"
+      );
+
+      if (!classroom) {
+        return res.status(404).json({ message: "Classroom not found" });
+      }
+
+      // Ensure this teacher owns the class
+      if (String(classroom.teacher) !== String(user.id)) {
+        return res.status(403).json({ message: "Not your classroom" });
+      }
+
+      res.status(200).json(classroom.pendingRequests);
+    } catch (error) {
+      console.error("❌ Error fetching join requests:", error);
+      res.status(500).json({ message: "Failed to load join requests" });
+    }
+  }
+);
+
+/**
+ * @route POST /api/teacher/classroom/:id/approve
+ * @desc Approve a student's join request
+ */
+teacherRoutes.post(
+  "/classroom/:id/approve",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const { studentId } = req.body;
+      const user = req.user as any;
+
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const classroom = await Classroom.findById(req.params.id);
+      if (!classroom) {
+        return res.status(404).json({ message: "Classroom not found" });
+      }
+
+      // Ensure this teacher owns the class
+      if (String(classroom.teacher) !== String(user.id)) {
+        return res.status(403).json({ message: "Not your classroom" });
+      }
+
+      // Remove from pendingRequests
+      classroom.pendingRequests = classroom.pendingRequests.filter(
+        (id: any) => String(id) !== String(studentId)
+      );
+
+      // Add to students list (if not already)
+      if (!classroom.students.includes(studentId)) {
+        classroom.students.push(studentId);
+      }
+
+      await classroom.save();
+      res.status(200).json({ message: "Student approved successfully" });
+    } catch (error) {
+      console.error("❌ Error approving student:", error);
+      res.status(500).json({ message: "Failed to approve student" });
+    }
+  }
+);
+
+/**
+ * @route POST /api/teacher/classroom/:id/reject
+ * @desc Reject a student's join request
+ */
+teacherRoutes.post(
+  "/classroom/:id/reject",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const { studentId } = req.body;
+      const user = req.user as any;
+
+      if (user?.role !== "teacher") {
+        return res
+          .status(403)
+          .json({ message: "Access denied. Teachers only." });
+      }
+
+      const classroom = await Classroom.findById(req.params.id);
+      if (!classroom) {
+        return res.status(404).json({ message: "Classroom not found" });
+      }
+
+      // Ensure this teacher owns the class
+      if (String(classroom.teacher) !== String(user.id)) {
+        return res.status(403).json({ message: "Not your classroom" });
+      }
+
+      // Remove from pendingRequests only
+      classroom.pendingRequests = classroom.pendingRequests.filter(
+        (id: any) => String(id) !== String(studentId)
+      );
+
+      await classroom.save();
+      res.status(200).json({ message: "Student rejected successfully" });
+    } catch (error) {
+      console.error("❌ Error rejecting student:", error);
+      res.status(500).json({ message: "Failed to reject student" });
+    }
+  }
+);
 
 export default teacherRoutes;

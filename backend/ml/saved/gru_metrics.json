@@ -1,0 +1,9 @@
+{
+    "model": "GRU",
+    "training_time_sec": 55.701,
+    "inference_time_ms_per_sample": 0.03,
+    "precision": 0.9958,
+    "storage_MB": 0.0791,
+    "maintainability_index": 99.0,
+    "early_stopped": true
+}

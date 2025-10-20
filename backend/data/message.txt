@@ -8,12 +8,13 @@ import path from "path";
 // ✅ Load .env (no matter where server.ts is located)
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-
 // ✅ Import routes
 import authRoutes from "./routes/authRoutes";
 import studentRoutes from "./routes/studentRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
-import typingRoutes from "./routes/typingRoutes";
+**import typingRoutes from "./routes/typingRoutes";**
+
+
 
 // ================================================
 // CONFIGURATION
@@ -21,7 +22,7 @@ import typingRoutes from "./routes/typingRoutes";
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI =
-  process.env.MONGO_URI || "mongodb+srv://admin:pd-keyboard-app@cluster0.wuypmob.mongodb.net/";
+  process.env.MONGO_URI || "mongodb://127.0.0.1:27017/typing_app";
 
 // ================================================
 // MIDDLEWARE
@@ -40,9 +41,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/teacher", teacherRoutes);
-app.use("/api/typing", typingRoutes);
-app.use("/api/auth/teacher", teacherRoutes);
-app.use("/api/auth/student", studentRoutes);
+**app.use("/api/typing", typingRoutes);**
 
 // Default route
 app.get("/", (req: Request, res: Response) => {

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
 
 interface PixelButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "accent" | "learn" | "play" | "settings";
+  variant?: "primary" | "secondary" | "accent" | "learn" | "play" | "settings" | "red" | "yellow" | "green" | "blue" | "purple" | "orange";
   size?: "sm" | "md" | "lg" | "xl";
 }
 

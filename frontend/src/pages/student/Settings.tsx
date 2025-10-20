@@ -12,45 +12,83 @@ export default function Settings() {
   const [classroomCode, setClassroomCode] = useState("");
   const userName = localStorage.getItem("userName") || "Student";
 
+  // 🔹 Logout Functionality
   const handleLogout = () => {
     localStorage.clear();
     toast.success("Logged out successfully!");
     navigate("/");
   };
 
-  const handleJoinClassroom = () => {
-    if (classroomCode.trim()) {
-      toast.success(`Joined classroom: ${classroomCode}`);
-      setClassroomCode("");
-    } else {
+  // 🔹 Join Classroom (connected to backend)
+  const handleJoinClassroom = async () => {
+    if (!classroomCode.trim()) {
       toast.error("Please enter a classroom code");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/student/join-classroom`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ code: classroomCode }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(`Joined classroom: ${data.classroom.name}`);
+        setClassroomCode("");
+      } else {
+        toast.error(data.message || "Failed to join classroom");
+      }
+    } catch (error) {
+      console.error("❌ Error joining classroom:", error);
+      toast.error("Error joining classroom");
     }
   };
 
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-4xl mx-auto">
+        {/* 🔙 Back Button + Logo */}
         <div className="flex items-center gap-4 mb-12">
-          <PixelButton variant="secondary" onClick={() => navigate("/student/dashboard")}>
+          <PixelButton
+            variant="secondary"
+            onClick={() => navigate("/student/dashboard")}
+          >
             <ArrowLeft size={20} />
           </PixelButton>
           <Logo />
         </div>
 
         <div className="space-y-6">
-          {/* Profile */}
+          {/* 👤 Profile Section */}
           <PixelCard>
             <h2 className="font-pixel text-xl mb-4">Profile</h2>
             <div className="flex items-center gap-4">
               <div className="text-6xl">🦁</div>
               <div>
-                <p className="font-pixel text-sm text-muted-foreground">Student Name</p>
+                <p className="font-pixel text-sm text-muted-foreground">
+                  Student Name
+                </p>
                 <p className="font-pixel text-lg">{userName}</p>
               </div>
             </div>
           </PixelCard>
 
-          {/* Classroom */}
+          {/* 🏫 Classroom Section */}
           <PixelCard variant="purple" className="text-white">
             <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
               <Users size={24} />
@@ -73,7 +111,7 @@ export default function Settings() {
             </div>
           </PixelCard>
 
-          {/* Logout */}
+          {/* 🚪 Logout Section */}
           <PixelCard variant="orange" className="text-white">
             <h2 className="font-pixel text-xl mb-4">Account</h2>
             <PixelButton

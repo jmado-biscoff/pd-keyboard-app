@@ -18,7 +18,7 @@ DEVICE = 0 if torch.cuda.is_available() else "cpu"
 CAMERA_INDEX = 1
 FRAME_WIDTH, FRAME_HEIGHT = 1280, 720
 
-SAVE_DIR = r"C:\Users\Julienne\pd-keyboard-app\backend\ml\results_csv"
+SAVE_DIR = r"E:\pd-keyboard-app\backend\ml\results_csv"
 os.makedirs(SAVE_DIR, exist_ok=True)
 csv_path = os.path.join(SAVE_DIR, f"finger_key_features_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
 
