@@ -1,3 +1,4 @@
+//comment
 import "dotenv/config";
 
 export const MODEL_PATH = process.env.MODEL_PATH!;
