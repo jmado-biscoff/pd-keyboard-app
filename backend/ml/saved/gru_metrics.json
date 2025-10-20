@@ -1,9 +1,9 @@
 {
-    "model": "GRU",
-    "training_time_sec": 55.701,
-    "inference_time_ms_per_sample": 0.03,
-    "precision": 0.9958,
-    "storage_MB": 0.0791,
-    "maintainability_index": 99.0,
-    "early_stopped": true
+  "model": "GRU",
+  "training_time_sec": 56.76,
+  "inference_time_ms_per_sample": 29,
+  "precision": 0.995,
+  "storage_MB": 0.0791,
+  "maintainability_index": 97.75,
+  "early_stopped": true
 }

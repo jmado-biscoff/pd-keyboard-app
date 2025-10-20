@@ -1,9 +1,9 @@
 {
-    "model": "MLP",
-    "training_time_sec": 50.882,
-    "inference_time_ms_per_sample": 0.026,
-    "precision": 0.8227,
-    "storage_MB": 0.1775,
-    "maintainability_index": 97.72,
-    "early_stopped": false
+  "model": "MLP",
+  "training_time_sec": 50.24,
+  "inference_time_ms_per_sample": 25,
+  "precision": 0.8128,
+  "storage_MB": 0.1775,
+  "maintainability_index": 97.72,
+  "early_stopped": false
 }
