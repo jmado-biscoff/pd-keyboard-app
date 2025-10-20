@@ -6,7 +6,8 @@ import dotenv from "dotenv";
 import path from "path";
 
 // ✅ Load .env (no matter where server.ts is located)
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
 
 // ✅ Import routes
 import authRoutes from "./routes/authRoutes";
