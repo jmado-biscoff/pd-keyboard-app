@@ -1,155 +1,215 @@
 # ============================================================
-# train_bilstm_crf.py
+# train_bilstm_crf.py — BiLSTM with 5-Fold Cross-Validation (Clean Version)
 # ============================================================
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import time, json, os, csv, sys
-from sklearn.metrics import precision_score
+import pandas as pd
+import numpy as np
+import os, time, json
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-# Allow imports from parent directory
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from dataset.preprocessing import load_data
-
-EPOCHS = 40
-LR = 5e-4
+# ============================================================
+# CONFIGURATION
+# ============================================================
+EPOCHS = 60
+LR = 1e-4
 SEQ_LEN = 32
 BATCH_SIZE = 32
+HIDDEN_DIM = 128
+DROPOUT = 0.3
+N_SPLITS = 5  # Number of folds
 
-# Dynamically resolve dataset path
 data_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "dataset", "raw", "synthetic_finger_key_dataset.csv")
 )
-train_loader, test_loader, input_dim = load_data(
-    data_path, sequence_length=SEQ_LEN, batch_size=BATCH_SIZE
-)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+print(f"Loading dataset from: {data_path}")
+df = pd.read_csv(data_path)
+
+# ============================================================
+# VALIDATION
+# ============================================================
+required_cols = ["pressed_key", "finger_name", "hand_used", "is_correct"]
+for col in required_cols:
+    if col not in df.columns:
+        raise ValueError(f"Missing required column: {col}")
+
+# ============================================================
+# ENCODE FEATURES
+# ============================================================
+label_encoders = {}
+for col in ["pressed_key", "finger_name", "hand_used"]:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col].astype(str))
+    label_encoders[col] = le
+
+X = df[["pressed_key", "finger_name", "hand_used"]].values
+y = df["is_correct"].astype(int).values
+
+# ============================================================
+# SEQUENCE CREATION FUNCTION
+# ============================================================
+def make_sequences(X, y, seq_len):
+    Xs, ys = [], []
+    for i in range(0, len(X) - seq_len):
+        Xs.append(X[i:i + seq_len])
+        ys.append(y[i + seq_len - 1])
+    return torch.tensor(Xs, dtype=torch.float32), torch.tensor(ys, dtype=torch.float32)
+
+# ============================================================
+# MODEL DEFINITION
+# ============================================================
 class BiLSTMCRF(nn.Module):
-    def __init__(self, input_dim, hidden_dim=64):
+    def __init__(self, input_dim, hidden_dim=128, dropout=0.3):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=False)
-        self.fc = nn.Linear(hidden_dim, 1)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2,
+                            dropout=dropout, batch_first=True, bidirectional=True)
+        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         lstm_out, _ = self.lstm(x)
-        out = self.fc(lstm_out[:, -1, :])
-        return self.sigmoid(out)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = BiLSTMCRF(input_dim).to(device)
-criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=LR)
-
-start_time = time.time()
-early_stop = False
-
-for epoch in range(EPOCHS):
-    model.train()
-    total_loss = 0
-    for X, y in train_loader:
-        X, y = X.to(device), y.to(device).unsqueeze(1)
-        optimizer.zero_grad()
-        y_pred = model(X)
-        loss = criterion(y_pred, y)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-
-    avg_loss = total_loss / len(train_loader)
-    print(f"Epoch [{epoch+1}/{EPOCHS}] Loss: {avg_loss:.4f}")
-
-    if round(avg_loss, 4) == 0.0000:
-        print("Training stopped early because loss reached 0.0000")
-        early_stop = True
-        break
-
-training_time = time.time() - start_time
+        x = lstm_out[:, -1, :]
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return self.sigmoid(x)
 
 # ============================================================
-# EVALUATION
+# CROSS-VALIDATION TRAINING
 # ============================================================
-model.eval()
-y_true, y_pred = [], []
-start_infer = time.time()
-with torch.no_grad():
-    for X, y in test_loader:
-        X = X.to(device)
-        preds = model(X).cpu().numpy()
-        y_pred.extend((preds > 0.5).astype(int).flatten())
-        y_true.extend(y.numpy())
+skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=42)
 
-# Convert inference time to milliseconds per sample
-inference_time_ms = ((time.time() - start_infer) / len(y_true)) * 1000
-precision = precision_score(y_true, y_pred, zero_division=0)
+fold_metrics = []
+best_f1 = 0
+fold_idx = 1
+input_dim = X.shape[1]
+
+for train_index, test_index in skf.split(X, y):
+    print(f"\n========== Fold {fold_idx}/{N_SPLITS} ==========")
+
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    X_train_seq, y_train_seq = make_sequences(X_train, y_train, SEQ_LEN)
+    X_test_seq, y_test_seq = make_sequences(X_test, y_test, SEQ_LEN)
+
+    train_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(X_train_seq, y_train_seq),
+        batch_size=BATCH_SIZE, shuffle=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(X_test_seq, y_test_seq),
+        batch_size=BATCH_SIZE, shuffle=False
+    )
+
+    # Initialize new model for each fold
+    model = BiLSTMCRF(input_dim, HIDDEN_DIM, DROPOUT).to(device)
+    criterion = nn.BCELoss()
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-5)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.7)
+
+    for epoch in range(EPOCHS):
+        model.train()
+        total_loss = 0
+        for Xb, yb in train_loader:
+            Xb, yb = Xb.to(device), yb.to(device).unsqueeze(1)
+            optimizer.zero_grad()
+            pred = model(Xb)
+            loss = criterion(pred, yb)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            total_loss += loss.item()
+
+        scheduler.step()
+        avg_loss = total_loss / len(train_loader)
+
+        # Validation per epoch
+        model.eval()
+        y_true, y_pred = [], []
+        with torch.no_grad():
+            for Xb, yb in test_loader:
+                Xb = Xb.to(device)
+                preds = model(Xb).cpu().numpy()
+                y_pred.extend((preds > 0.5).astype(int).flatten())
+                y_true.extend(yb.numpy())
+
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        acc = accuracy_score(y_true, y_pred)
+        prec = precision_score(y_true, y_pred, zero_division=0)
+        rec = recall_score(y_true, y_pred, zero_division=0)
+
+        print(f"Fold {fold_idx} | Epoch {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | Acc: {acc:.4f} | F1: {f1:.4f}")
+
+    # Final evaluation per fold
+    model.eval()
+    y_true, y_pred = [], []
+    with torch.no_grad():
+        for Xb, yb in test_loader:
+            Xb = Xb.to(device)
+            preds = model(Xb).cpu().numpy()
+            y_pred.extend((preds > 0.5).astype(int).flatten())
+            y_true.extend(yb.numpy())
+
+    precision = precision_score(y_true, y_pred, zero_division=0)
+    recall = recall_score(y_true, y_pred, zero_division=0)
+    f1 = f1_score(y_true, y_pred, zero_division=0)
+    accuracy = accuracy_score(y_true, y_pred)
+
+    print(f"Fold {fold_idx} — Accuracy: {accuracy:.4f}, F1: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
+
+    fold_metrics.append({
+        "fold": fold_idx,
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
+    })
+
+    if f1 > best_f1:
+        best_f1 = f1
+        save_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "saved"))
+        os.makedirs(save_dir, exist_ok=True)
+        model_path = os.path.join(save_dir, "bilstm_highacc_bestfold.pth")
+        torch.save(model.state_dict(), model_path)
+        print(f"Best model updated (Fold {fold_idx})")
+
+    fold_idx += 1
 
 # ============================================================
-# STORAGE & MAINTAINABILITY
+# AGGREGATE METRICS
 # ============================================================
-save_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "saved", "bilstm_crf_model.pth")
-)
-os.makedirs(os.path.dirname(save_path), exist_ok=True)
-torch.save(model.state_dict(), save_path)
-storage_mb = os.path.getsize(save_path) / (1024 * 1024)
-param_count = sum(p.numel() for p in model.parameters())
-maintainability_index = max(0, 100 - (param_count / 1e5) * 5)
+avg_acc = np.mean([m["accuracy"] for m in fold_metrics])
+avg_f1 = np.mean([m["f1"] for m in fold_metrics])
+avg_prec = np.mean([m["precision"] for m in fold_metrics])
+avg_rec = np.mean([m["recall"] for m in fold_metrics])
 
-# ============================================================
-# Export ONNX version
-# ============================================================
-onnx_path = save_path.replace(".pth", ".onnx")
-dummy_input = torch.randn(1, SEQ_LEN, input_dim).to(device)
-torch.onnx.export(
-    model,
-    dummy_input,
-    onnx_path,
-    export_params=True,
-    opset_version=17,
-    input_names=["input"],
-    output_names=["output"],
-    dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
-)
-print(f"ONNX model exported to: {onnx_path}")
+print("\n========== Cross-Validation Summary ==========")
+print(f"Avg Accuracy: {avg_acc:.4f} | Avg F1: {avg_f1:.4f} | Avg Precision: {avg_prec:.4f} | Avg Recall: {avg_rec:.4f}")
 
-# ============================================================
-# METRICS
-# ============================================================
 metrics = {
-    "model": "BiLSTM-CRF",
-    "training_time_sec": round(training_time, 3),
-    "inference_time_ms_per_sample": round(inference_time_ms, 3),
-    "precision": round(float(precision), 4),
-    "storage_MB": round(storage_mb, 4),
-    "maintainability_index": round(maintainability_index, 2),
-    "early_stopped": early_stop
+    "model": "BiLSTM-CRF (High Accuracy + 5-Fold CV)",
+    "folds": N_SPLITS,
+    "avg_accuracy": round(float(avg_acc), 4),
+    "avg_precision": round(float(avg_prec), 4),
+    "avg_recall": round(float(avg_rec), 4),
+    "avg_f1_score": round(float(avg_f1), 4)
 }
 
-# ============================================================
-# SAVE METRICS
-# ============================================================
-json_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "saved", "bilstm_crf_metrics.json")
-)
+save_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "saved"))
+os.makedirs(save_dir, exist_ok=True)
+json_path = os.path.join(save_dir, "bilstm_highacc_cv_metrics.json")
 with open(json_path, "w") as f:
     json.dump(metrics, f, indent=4)
 
-csv_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "saved", "model_results.csv")
-)
-header = [
-    "model", "training_time_sec", "inference_time_ms_per_sample",
-    "precision", "storage_MB", "maintainability_index", "early_stopped"
-]
-write_header = not os.path.exists(csv_path)
-with open(csv_path, "a", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=header)
-    if write_header:
-        writer.writeheader()
-    writer.writerow(metrics)
-
-print("BiLSTM-CRF model and metrics saved successfully.")
-print(f"Model saved to: {save_path}")
-print(f"Metrics saved to: {json_path}")
-print(f"Results appended to: {csv_path}")
+print(f"\nTraining complete. Cross-validation metrics saved to {json_path}")
