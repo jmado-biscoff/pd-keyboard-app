@@ -14,6 +14,7 @@ import authRoutes from "./routes/authRoutes";
 import studentRoutes from "./routes/studentRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import typingRoutes from "./routes/typingRoutes";
+import detectionRouter from "./routes/detectionRoutes";
 
 // ================================================
 // CONFIGURATION
@@ -43,6 +44,7 @@ app.use("/api/teacher", teacherRoutes);
 app.use("/api/typing", typingRoutes);
 app.use("/api/auth/teacher", teacherRoutes);
 app.use("/api/auth/student", studentRoutes);
+app.use("/api/detect", detectionRouter);
 
 // Default route
 app.get("/", (req: Request, res: Response) => {

@@ -1,8 +1,0 @@
-{
-    "model": "BiLSTM-CRF (High Accuracy + 5-Fold CV)",
-    "folds": 5,
-    "avg_accuracy": 0.951,
-    "avg_precision": 0.9697,
-    "avg_recall": 0.9304,
-    "avg_f1_score": 0.9496
-}

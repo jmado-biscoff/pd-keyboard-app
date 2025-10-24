@@ -1,215 +1,175 @@
 # ============================================================
-# train_bilstm_crf.py — BiLSTM with 5-Fold Cross-Validation (Clean Version)
+# train_bilstm_correctness_full_11feat_v2.py
+# Author: PD Team Seven
+# Purpose: Train 11-feature BiLSTM model (8 numeric + 3 categorical)
 # ============================================================
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader, Subset
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import accuracy_score, classification_report
 import pandas as pd
 import numpy as np
-import os, time, json
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+import joblib, os, time
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
-EPOCHS = 60
-LR = 1e-4
-SEQ_LEN = 32
-BATCH_SIZE = 32
-HIDDEN_DIM = 128
-DROPOUT = 0.3
-N_SPLITS = 5  # Number of folds
+DATA_PATH = r"E:\pd-keyboard-app\backend\ml\dataset\raw\synthetic_finger_key_dataset_fixed.csv"
+SAVE_DIR  = r"E:\pd-keyboard-app\backend\ml\saved"
+os.makedirs(SAVE_DIR, exist_ok=True)
 
-data_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "dataset", "raw", "synthetic_finger_key_dataset.csv")
-)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-print(f"Loading dataset from: {data_path}")
-df = pd.read_csv(data_path)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+EPOCHS = 150
+BATCH_SIZE = 64
+LR = 1e-3
+K_FOLDS = 5
+PRINT_INTERVAL = 5
 
 # ============================================================
-# VALIDATION
+# LOAD DATA
 # ============================================================
-required_cols = ["pressed_key", "finger_name", "hand_used", "is_correct"]
-for col in required_cols:
-    if col not in df.columns:
-        raise ValueError(f"Missing required column: {col}")
+df = pd.read_csv(DATA_PATH)
+print(f"✅ Loaded dataset with {len(df)} samples and {len(df.columns)} columns.")
+
+# Expected numeric + categorical columns
+num_features = ["dx","dy","norm_dx","norm_dy","norm_distance"]
+cat_features = ["pressed_key","finger_name","hand_used"]
+
+# Add derived geometric features
+df["angle"] = np.degrees(np.arctan2(df["dy"], df["dx"]))
+df["abs_dx"] = df["dx"].abs()
+df["abs_dy"] = df["dy"].abs()
+
+extra_numeric = ["angle","abs_dx","abs_dy"]
+num_features += extra_numeric  # total = 8 numeric
+print(f"🧩 Numeric features: {num_features}")
 
 # ============================================================
-# ENCODE FEATURES
+# ENCODERS (categorical)
 # ============================================================
-label_encoders = {}
-for col in ["pressed_key", "finger_name", "hand_used"]:
+all_keys = list("abcdefghijklmnopqrstuvwxyz") + [
+    "space","enter","shift","tab","caps-lock","ctrl","alt","backspace",
+    "semicolon","comma","period","slash","quote","minus","equal",
+    "bracket-left","bracket-right","backslash","backtick",
+    "1","2","3","4","5","6","7","8","9","0"
+]
+all_fingers = ["thumb","index","middle","ring","pinky"]
+all_hands = ["left","right"]
+
+encoders = {}
+for col, classes in zip(cat_features,[all_keys,all_fingers,all_hands]):
     le = LabelEncoder()
-    df[col] = le.fit_transform(df[col].astype(str))
-    label_encoders[col] = le
+    le.fit(classes)
+    encoders[col] = le
+    df[col] = df[col].apply(lambda v: v if v in le.classes_ else le.classes_[0])
+    df[col] = le.transform(df[col])
 
-X = df[["pressed_key", "finger_name", "hand_used"]].values
-y = df["is_correct"].astype(int).values
-
-# ============================================================
-# SEQUENCE CREATION FUNCTION
-# ============================================================
-def make_sequences(X, y, seq_len):
-    Xs, ys = [], []
-    for i in range(0, len(X) - seq_len):
-        Xs.append(X[i:i + seq_len])
-        ys.append(y[i + seq_len - 1])
-    return torch.tensor(Xs, dtype=torch.float32), torch.tensor(ys, dtype=torch.float32)
+joblib.dump(encoders, os.path.join(SAVE_DIR,"encoders.pkl"))
+print("✅ Encoders saved.")
 
 # ============================================================
-# MODEL DEFINITION
+# SCALER (fit 8 numeric features)
 # ============================================================
-class BiLSTMCRF(nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, dropout=0.3):
+scaler = StandardScaler()
+df[num_features] = scaler.fit_transform(df[num_features])
+joblib.dump(scaler, os.path.join(SAVE_DIR,"scaler_8feat.pkl"))
+print("✅ Scaler (8 features) saved.")
+
+# ============================================================
+# DATASET PREPARATION
+# ============================================================
+X = df[num_features + cat_features].values
+y = df["is_correct"].values
+
+class FingerKeyDataset(Dataset):
+    def __init__(self,X,y):
+        self.X = torch.tensor(X,dtype=torch.float32)
+        self.y = torch.tensor(y,dtype=torch.float32)
+    def __len__(self): return len(self.X)
+    def __getitem__(self,idx):
+        return self.X[idx].unsqueeze(0), self.y[idx]
+
+dataset = FingerKeyDataset(X,y)
+
+# ============================================================
+# MODEL
+# ============================================================
+class BiLSTMClassifier(nn.Module):
+    def __init__(self,input_dim=11,hidden_dim=256,num_layers=3,dropout=0.3):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2,
-                            dropout=dropout, batch_first=True, bidirectional=True)
-        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.lstm = nn.LSTM(
+            input_dim,hidden_dim,num_layers=num_layers,
+            batch_first=True,bidirectional=True,dropout=dropout
+        )
+        self.fc1 = nn.Linear(hidden_dim*2,256)
+        self.fc2 = nn.Linear(256,128)
+        self.fc3 = nn.Linear(128,1)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(hidden_dim, 1)
+        self.dropout = nn.Dropout(0.4)
         self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        lstm_out, _ = self.lstm(x)
-        x = lstm_out[:, -1, :]
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return self.sigmoid(x)
+    def forward(self,x):
+        out,_ = self.lstm(x)
+        out = out[:,-1,:]
+        out = self.dropout(self.relu(self.fc1(out)))
+        out = self.dropout(self.relu(self.fc2(out)))
+        out = self.fc3(out)
+        return self.sigmoid(out)
 
 # ============================================================
-# CROSS-VALIDATION TRAINING
+# TRAINING LOOP WITH K-FOLD
 # ============================================================
-skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=42)
+criterion = nn.BCELoss()
+skf = StratifiedKFold(n_splits=K_FOLDS,shuffle=True,random_state=42)
+best_acc, best_path = 0.0, os.path.join(SAVE_DIR,"bilstm_spatial_11feat.pth")
 
-fold_metrics = []
-best_f1 = 0
-fold_idx = 1
-input_dim = X.shape[1]
+for fold,(train_idx,val_idx) in enumerate(skf.split(X,y)):
+    print(f"\n==========================")
+    print(f"🧩 Fold {fold+1}/{K_FOLDS}")
+    print("==========================")
+    train_loader = DataLoader(Subset(dataset,train_idx),batch_size=BATCH_SIZE,shuffle=True)
+    val_loader = DataLoader(Subset(dataset,val_idx),batch_size=BATCH_SIZE,shuffle=False)
 
-for train_index, test_index in skf.split(X, y):
-    print(f"\n========== Fold {fold_idx}/{N_SPLITS} ==========")
+    model = BiLSTMClassifier(input_dim=11).to(DEVICE)
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
 
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-
-    X_train_seq, y_train_seq = make_sequences(X_train, y_train, SEQ_LEN)
-    X_test_seq, y_test_seq = make_sequences(X_test, y_test, SEQ_LEN)
-
-    train_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(X_train_seq, y_train_seq),
-        batch_size=BATCH_SIZE, shuffle=True
-    )
-    test_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(X_test_seq, y_test_seq),
-        batch_size=BATCH_SIZE, shuffle=False
-    )
-
-    # Initialize new model for each fold
-    model = BiLSTMCRF(input_dim, HIDDEN_DIM, DROPOUT).to(device)
-    criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-5)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.7)
-
-    for epoch in range(EPOCHS):
+    for epoch in range(1, EPOCHS+1):
         model.train()
-        total_loss = 0
-        for Xb, yb in train_loader:
-            Xb, yb = Xb.to(device), yb.to(device).unsqueeze(1)
+        total_loss, correct, total = 0, 0, 0
+        for Xb,yb in train_loader:
+            Xb,yb = Xb.to(DEVICE),yb.to(DEVICE).unsqueeze(1)
             optimizer.zero_grad()
-            pred = model(Xb)
-            loss = criterion(pred, yb)
+            out = model(Xb)
+            loss = criterion(out,yb)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_loss += loss.item()
+            correct += (out>0.5).eq(yb).sum().item()
+            total += yb.size(0)
+        train_acc = correct/total
+        avg_loss = total_loss/len(train_loader)
 
-        scheduler.step()
-        avg_loss = total_loss / len(train_loader)
-
-        # Validation per epoch
+        # Validation
         model.eval()
-        y_true, y_pred = [], []
+        preds,truths=[],[]
         with torch.no_grad():
-            for Xb, yb in test_loader:
-                Xb = Xb.to(device)
-                preds = model(Xb).cpu().numpy()
-                y_pred.extend((preds > 0.5).astype(int).flatten())
-                y_true.extend(yb.numpy())
+            for Xb,yb in val_loader:
+                Xb,yb = Xb.to(DEVICE),yb.to(DEVICE).unsqueeze(1)
+                out = model(Xb)
+                preds.extend((out>0.5).float().cpu().numpy().flatten())
+                truths.extend(yb.cpu().numpy().flatten())
+        acc = accuracy_score(truths,preds)
 
-        f1 = f1_score(y_true, y_pred, zero_division=0)
-        acc = accuracy_score(y_true, y_pred)
-        prec = precision_score(y_true, y_pred, zero_division=0)
-        rec = recall_score(y_true, y_pred, zero_division=0)
+        if epoch % PRINT_INTERVAL == 0 or epoch == 1:
+            print(f"Fold {fold+1} | Epoch {epoch}/{EPOCHS} | Loss: {avg_loss:.4f} | TrainAcc: {train_acc*100:.2f}% | ValAcc: {acc*100:.2f}%")
 
-        print(f"Fold {fold_idx} | Epoch {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | Acc: {acc:.4f} | F1: {f1:.4f}")
+        if acc > best_acc:
+            best_acc = acc
+            torch.save(model.state_dict(), best_path)
 
-    # Final evaluation per fold
-    model.eval()
-    y_true, y_pred = [], []
-    with torch.no_grad():
-        for Xb, yb in test_loader:
-            Xb = Xb.to(device)
-            preds = model(Xb).cpu().numpy()
-            y_pred.extend((preds > 0.5).astype(int).flatten())
-            y_true.extend(yb.numpy())
-
-    precision = precision_score(y_true, y_pred, zero_division=0)
-    recall = recall_score(y_true, y_pred, zero_division=0)
-    f1 = f1_score(y_true, y_pred, zero_division=0)
-    accuracy = accuracy_score(y_true, y_pred)
-
-    print(f"Fold {fold_idx} — Accuracy: {accuracy:.4f}, F1: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
-
-    fold_metrics.append({
-        "fold": fold_idx,
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1
-    })
-
-    if f1 > best_f1:
-        best_f1 = f1
-        save_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "saved"))
-        os.makedirs(save_dir, exist_ok=True)
-        model_path = os.path.join(save_dir, "bilstm_highacc_bestfold.pth")
-        torch.save(model.state_dict(), model_path)
-        print(f"Best model updated (Fold {fold_idx})")
-
-    fold_idx += 1
-
-# ============================================================
-# AGGREGATE METRICS
-# ============================================================
-avg_acc = np.mean([m["accuracy"] for m in fold_metrics])
-avg_f1 = np.mean([m["f1"] for m in fold_metrics])
-avg_prec = np.mean([m["precision"] for m in fold_metrics])
-avg_rec = np.mean([m["recall"] for m in fold_metrics])
-
-print("\n========== Cross-Validation Summary ==========")
-print(f"Avg Accuracy: {avg_acc:.4f} | Avg F1: {avg_f1:.4f} | Avg Precision: {avg_prec:.4f} | Avg Recall: {avg_rec:.4f}")
-
-metrics = {
-    "model": "BiLSTM-CRF (High Accuracy + 5-Fold CV)",
-    "folds": N_SPLITS,
-    "avg_accuracy": round(float(avg_acc), 4),
-    "avg_precision": round(float(avg_prec), 4),
-    "avg_recall": round(float(avg_rec), 4),
-    "avg_f1_score": round(float(avg_f1), 4)
-}
-
-save_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "saved"))
-os.makedirs(save_dir, exist_ok=True)
-json_path = os.path.join(save_dir, "bilstm_highacc_cv_metrics.json")
-with open(json_path, "w") as f:
-    json.dump(metrics, f, indent=4)
-
-print(f"\nTraining complete. Cross-validation metrics saved to {json_path}")
+print(f"\n✅ Training complete.")
+print(f"✅ Best validation accuracy: {best_acc*100:.2f}%")
+print(f"✅ Best model saved to: {best_path}")

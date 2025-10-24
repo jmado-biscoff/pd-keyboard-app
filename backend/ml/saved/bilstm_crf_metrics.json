@@ -1,9 +1,0 @@
-{
-  "model": "BiLSTM-CRF",
-  "training_time_sec": 55.79,
-  "inference_time_ms_per_sample": 28,
-  "precision": 0.884,
-  "storage_MB": 0.1528,
-  "maintainability_index": 99.4,
-  "early_stopped": false
-}
