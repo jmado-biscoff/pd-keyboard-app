@@ -33,8 +33,8 @@ function loadFile(filename: string, separator: string | RegExp = "\n") {
 // ✅ Load data files
 const letterList = loadFile("letters.txt");
 const wordList = loadFile("words.txt");
+const phraseList = loadFile("phrases.txt");
 const sentenceList = loadFile("sentences.txt");
-const paragraphList = loadFile("paragraphs.txt");
 
 // ============================================================
 // 🔹 Helper Function
@@ -60,27 +60,28 @@ router.get("/level/:id", (req: Request, res: Response) => {
 
   switch (id) {
     case "1":
-      // 🔹 Random letters from letters.txt
+      // 🔹 Level 1: Letters
       data = getRandomItems(letterList, 10);
       break;
 
     case "2":
-      // 🔹 3–5 words combined into one string
+      // 🔹 Level 2: Words
       const numWords = Math.floor(Math.random() * 3) + 3; // 3–5
       data = [getRandomItems(wordList, numWords).join(" ")];
       break;
 
     case "3":
-      // 🔹 1–3 sentences joined into one passage
-      const numSentences = Math.floor(Math.random() * 3) + 1; // 1–3
-      data = [getRandomItems(sentenceList, numSentences).join(" ")];
+      // 🔹 Level 3: Phrases (single random phrase)
+      const randomPhrase =
+        phraseList[Math.floor(Math.random() * phraseList.length)];
+      data = [randomPhrase];
       break;
 
     case "4":
-      // 🔹 Exactly 1 paragraph — robust handling
-      const randomParagraph =
-        paragraphList[Math.floor(Math.random() * paragraphList.length)];
-      data = [randomParagraph];
+      // 🔹 Level 4: Sentences
+      const randomSentence =
+        sentenceList[Math.floor(Math.random() * sentenceList.length)];
+      data = [randomSentence];
       break;
 
     default:

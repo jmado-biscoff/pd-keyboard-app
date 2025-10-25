@@ -1,5 +1,5 @@
 # ============================================================
-# detect_keyboard_live_rule_based_letters_punct.py — FINAL VERSION (with expected key logic)
+# detect_keyboard_live_rule_based_letters_punct.py — FIXED (SINGLE COUNT PER PRESS)
 # ============================================================
 
 import cv2
@@ -27,7 +27,7 @@ csv_path = os.path.join(
 )
 
 # ============================================================
-# LOAD EXPECTED KEYS
+# LOAD EXPECTED KEYS (SPACE REMOVED)
 # ============================================================
 expected_keys = []
 if os.path.exists(EXPECTED_PATH):
@@ -35,12 +35,10 @@ if os.path.exists(EXPECTED_PATH):
         try:
             data = json.load(f)
             words = data.get("words", [])
-            for i, word in enumerate(words):
+            for word in words:
                 for ch in word:
                     expected_keys.append(ch.lower())
-                if i < len(words) - 1:
-                    expected_keys.append("space")
-            print(f"✅ Loaded {len(expected_keys)} expected keys from expected_words.json")
+            print(f"✅ Loaded {len(expected_keys)} expected keys (SPACE excluded)")
         except Exception as e:
             print(f"⚠️ Failed to load expected keys: {e}")
 else:
@@ -86,40 +84,38 @@ TOUCH_TYPING_MAP = {
     "o": ("right", "ring"), "p": ("right", "pinky"),
     "z": ("left", "pinky"), "x": ("left", "ring"), "c": ("left", "middle"), "v": ("left", "index"),
     "b": ("left", "index"), "n": ("right", "index"), "m": ("right", "index"),
-    "1": ("left", "pinky"), "2": ("left", "ring"), "3": ("left", "middle"), "4": ("left", "index"),
-    "5": ("left", "index"), "6": ("right", "index"), "7": ("right", "index"), "8": ("right", "middle"),
-    "9": ("right", "ring"), "0": ("right", "pinky"),
-    "space": ("both", "thumb"), "enter": ("right", "pinky"), "tab": ("left", "pinky"),
-    "caps-lock": ("left", "pinky"), "shift": ("left", "pinky"), "ctrl": ("left", "pinky"),
-    "alt": ("right", "thumb"), "backspace": ("right", "pinky"),
-    ",": ("right", "middle"), ".": ("right", "ring"), "/": ("right", "pinky"),
-    "?": ("right", "pinky"), "!": ("left", "pinky")
 }
 
 # ============================================================
-# INPUT HANDLER
+# INPUT HANDLER (Keyboard listener)
 # ============================================================
 pressed_key = None
 last_logged_key = None
+last_sent_time = 0
+DEBOUNCE_INTERVAL = 0.25  # seconds — prevent double-counting within 250ms
 
 def key_listener():
+    """Background thread to capture keyboard presses."""
     global pressed_key
+    last_key = None
     while True:
         event = keyboard.read_event(suppress=False)
         if event.event_type == keyboard.KEY_DOWN:
             name = event.name
-            if name == "space":
-                pressed_key = "space"
-            elif name == "enter":
-                pressed_key = "enter"
-            elif name == "backspace":
-                pressed_key = "backspace"
-            elif len(name) == 1:
-                pressed_key = name
+            if len(name) == 1:
+                key_name = name
+            elif name in ["space", "enter", "backspace", "shift", "ctrl", "tab", "caps lock"]:
+                key_name = name
             else:
-                pressed_key = None
+                key_name = None
+
+            if key_name and key_name != last_key:
+                pressed_key = key_name
+                last_key = key_name
+
         elif event.event_type == keyboard.KEY_UP:
             pressed_key = None
+            last_key = None
 
 listener_thread = threading.Thread(target=key_listener, daemon=True)
 listener_thread.start()
@@ -156,7 +152,7 @@ print(f"✅ Locked {len(key_positions)} key boxes detected.")
 sys.stdout.flush()
 
 # ============================================================
-# LIVE LOOP — RULE-BASED + EXPECTED KEY FEEDBACK
+# LIVE LOOP — RULE-BASED + EXPECTED KEY FEEDBACK (DEBOUNCED)
 # ============================================================
 while True:
     ret, frame = cap.read()
@@ -178,16 +174,19 @@ while True:
                 detected_fingers.append((name, fx, fy, hand_used))
                 cv2.circle(frame, (fx, fy), 6, (0, 255, 255), -1)
 
-    # Get current expected key
-    expected_key = None
-    if current_expected_index < len(expected_keys):
-        expected_key = expected_keys[current_expected_index]
+    expected_key = expected_keys[current_expected_index] if current_expected_index < len(expected_keys) else None
 
-    if pressed_key and pressed_key != last_logged_key:
-        last_logged_key = pressed_key
+    now = time.time()
+    # ✅ Debounce and prevent repeats
+    if pressed_key and (pressed_key != last_logged_key or (now - last_sent_time) > DEBOUNCE_INTERVAL):
         key = pressed_key.lower()
+        last_logged_key = key
+        last_sent_time = now
 
-        if key in TOUCH_TYPING_MAP and key in key_positions and detected_fingers:
+        if key == "space" or key not in TOUCH_TYPING_MAP:
+            continue
+
+        if key in key_positions and detected_fingers:
             x1, y1, x2, y2 = key_positions[key]
             key_cx, key_cy = (x1 + x2) // 2, (y1 + y2) // 2
 
@@ -202,14 +201,9 @@ while True:
                 dx, dy = fx - key_cx, fy - key_cy
                 norm_dx, norm_dy = dx / FRAME_WIDTH, dy / FRAME_HEIGHT
                 norm_dist = min_dist / np.sqrt(FRAME_WIDTH**2 + FRAME_HEIGHT**2)
-
                 expected_hand, expected_finger = TOUCH_TYPING_MAP.get(key, ("unknown", "unknown"))
                 rule_based_correct = (expected_finger == closest_finger and (expected_hand == hand_used or expected_hand == "both"))
-
-                # ✅ JSON correctness based on expected key matching
                 json_correct = (expected_key == key) if expected_key else True
-
-                # ✅ Combine rule-based + expected-key correctness (both must be true)
                 overall_correct = rule_based_correct and json_correct
                 rule_label = "Correct" if overall_correct else "Incorrect"
                 color = (0, 255, 0) if overall_correct else (0, 0, 255)
@@ -217,7 +211,6 @@ while True:
                 cv2.putText(frame, f"{key.upper()} | Exp: {expected_key or '-'} | {rule_label}",
                             (40, 60), cv2.FONT_HERSHEY_DUPLEX, 1.0, color, 2)
 
-                # Log CSV
                 with open(csv_path, "a", newline="") as f:
                     csv.writer(f).writerow([
                         time.time(), key, closest_finger, hand_used,
@@ -225,7 +218,6 @@ while True:
                         norm_dx, norm_dy, norm_dist, rule_label
                     ])
 
-                # ✅ JSON result (for Node)
                 result = {
                     "expected_key": expected_key.upper() if expected_key else None,
                     "key": key.upper(),
@@ -233,15 +225,15 @@ while True:
                     "hand": hand_used,
                     "correct": overall_correct
                 }
+
                 print(json.dumps(result))
                 sys.stdout.flush()
 
-                # ✅ Advance expected pointer
                 if expected_key is not None:
                     current_expected_index += 1
 
     elif not pressed_key:
-        last_logged_key = None
+        last_logged_key = None  # ready for next press
 
     cv2.imshow("YOLO + Rule-Based Typing Feedback", frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):

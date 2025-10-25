@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { PixelButton } from "@/components/PixelButton";
@@ -10,23 +10,46 @@ export default function Play() {
   const navigate = useNavigate();
   const [sessionType, setSessionType] = useState<"practice" | "evaluated">("practice");
   const [level, setLevel] = useState(1);
+  const [history, setHistory] = useState<any[]>([]);
 
   const levels = [
     { id: 1, name: "Level 1", description: "Letters only" },
     { id: 2, name: "Level 2", description: "Random words" },
-    { id: 3, name: "Level 3", description: "Phrases with numbers" },
-    { id: 4, name: "Level 4", description: "Full paragraphs" },
+    { id: 3, name: "Level 3", description: "Short phrases" },
+    { id: 4, name: "Level 4", description: "Full sentences" },
   ];
 
-  const history = [
+  // 🔹 Local fallback data (if fetch fails)
+  const fallbackHistory = [
     { date: "2024-01-15", level: 1, wpm: 25, accuracy: 92, grade: "A" },
     { date: "2024-01-14", level: 1, wpm: 22, accuracy: 88, grade: "B+" },
     { date: "2024-01-13", level: 1, wpm: 20, accuracy: 85, grade: "B" },
   ];
 
+  // 🔹 Fetch recent sessions from MongoDB
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/results");
+        if (!res.ok) throw new Error("Failed to fetch");
+        const data = await res.json();
+        setHistory(data);
+      } catch (err) {
+        console.error("❌ Failed to fetch results:", err);
+        setHistory(fallbackHistory); // Use local fallback if backend unavailable
+      }
+    };
+
+    fetchResults();
+  }, []);
+
+  // 🔹 Start typing session
   const startSession = () => {
     navigate(`/student/play/session?type=${sessionType}&level=${level}`);
   };
+
+  // 🔹 Compute best WPM for Stats card
+  const bestWPM = history.length > 0 ? Math.max(...history.map((s) => s.wpm || 0)) : 0;
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -41,7 +64,7 @@ export default function Play() {
         <source src={bgVideo} type="video/mp4" />
       </video>
 
-      {/* 🔹 Optional dark overlay */}
+      {/* 🔹 Overlay */}
       <div className="absolute inset-0 bg-black/40 -z-10" />
 
       {/* 🔹 Page content */}
@@ -49,7 +72,10 @@ export default function Play() {
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-4 mb-12">
-            <PixelButton variant="secondary" onClick={() => navigate("/student/dashboard")}>
+            <PixelButton
+              variant="secondary"
+              onClick={() => navigate("/student/dashboard")}
+            >
               <ArrowLeft size={20} />
             </PixelButton>
             <Logo />
@@ -57,7 +83,10 @@ export default function Play() {
 
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
             {/* 🔸 Session Setup */}
-            <PixelCard variant="orange" className="text-white bg-black/60 border-[3px] border-orange-400 backdrop-blur-sm">
+            <PixelCard
+              variant="orange"
+              className="text-white bg-black/60 border-[3px] border-orange-400 backdrop-blur-sm"
+            >
               <h2 className="font-pixel text-xl mb-6">Start Session</h2>
 
               <div className="space-y-6">
@@ -119,14 +148,17 @@ export default function Play() {
             </PixelCard>
 
             {/* 🔸 Stats Preview */}
-            <PixelCard variant="purple" className="text-white bg-black/60 border-[3px] border-purple-400 backdrop-blur-sm">
+            <PixelCard
+              variant="purple"
+              className="text-white bg-black/60 border-[3px] border-purple-400 backdrop-blur-sm"
+            >
               <h2 className="font-pixel text-xl mb-6">Your Stats</h2>
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <Trophy size={32} className="text-yellow-300" />
                   <div>
                     <p className="font-pixel text-xs opacity-90">Best WPM</p>
-                    <p className="font-pixel text-2xl">25</p>
+                    <p className="font-pixel text-2xl">{bestWPM}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -142,28 +174,38 @@ export default function Play() {
 
           {/* 🔸 Recent Sessions History */}
           <PixelCard className="bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
-            <h2 className="font-pixel text-xl mb-6 text-yellow-200">Recent Sessions</h2>
+            <h2 className="font-pixel text-xl mb-6 text-yellow-200">
+              Recent Sessions
+            </h2>
             <div className="space-y-3">
-              {history.map((session, idx) => (
-                <div
-                  key={idx}
-                  className="pixel-border p-4 bg-black/50 flex items-center justify-between text-white border border-yellow-300 rounded-md"
-                >
-                  <div>
-                    <p className="font-pixel text-sm">Level {session.level}</p>
-                    <p className="font-pixel text-xs opacity-80">{session.date}</p>
+              {history.length === 0 ? (
+                <p className="font-pixel text-sm text-gray-400 text-center">
+                  No sessions recorded yet.
+                </p>
+              ) : (
+                history.map((session, idx) => (
+                  <div
+                    key={idx}
+                    className="pixel-border p-4 bg-black/50 flex items-center justify-between text-white border border-yellow-300 rounded-md"
+                  >
+                    <div>
+                      <p className="font-pixel text-sm">Level {session.level}</p>
+                      <p className="font-pixel text-xs opacity-80">
+                        {new Date(session.date).toISOString().split("T")[0]}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-pixel text-sm">{session.wpm} WPM</p>
+                      <p className="font-pixel text-xs opacity-80">
+                        {session.accuracy}% Accuracy
+                      </p>
+                    </div>
+                    <div className="font-pixel text-xl text-yellow-400">
+                      {session.grade || "-"}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-pixel text-sm">{session.wpm} WPM</p>
-                    <p className="font-pixel text-xs opacity-80">
-                      {session.accuracy}% Accuracy
-                    </p>
-                  </div>
-                  <div className="font-pixel text-xl text-yellow-400">
-                    {session.grade}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </PixelCard>
         </div>

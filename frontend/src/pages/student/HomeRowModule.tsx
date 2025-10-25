@@ -23,49 +23,62 @@ export default function HomeRowModule() {
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentText, setCurrentText] = useState(lessons[0]);
   const [userInput, setUserInput] = useState("");
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [completed, setCompleted] = useState(false);
-  const [lessonStart, setLessonStart] = useState(Date.now());
   const [highlightedKey, setHighlightedKey] = useState("");
+  const [lessonStart, setLessonStart] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [totalChars, setTotalChars] = useState(0);
   const [totalCorrect, setTotalCorrect] = useState(0);
-  const [totalTime, setTotalTime] = useState(0);
   const [errorMap, setErrorMap] = useState<Record<string, number>>({});
+  const [timerRunning, setTimerRunning] = useState(true);
 
   const homeRowLayout = [["A", "S", "D", "F", "G", "H", "J", "K", "L", ";"]];
 
-  // WPM + Accuracy
   useEffect(() => {
-    const elapsed = (Date.now() - lessonStart) / 1000 / 60;
+    let interval: any;
+    if (timerRunning && !completed) {
+      interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - lessonStart) / 1000));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timerRunning, completed, lessonStart]);
+
+  const currentText = lessons[currentIndex];
+
+  useEffect(() => {
+    const elapsedMinutes = Math.max((Date.now() - lessonStart) / 1000 / 60, 0.01);
     const wordsTyped = userInput.trim().split(" ").length;
-    setWpm(Math.round(wordsTyped / (elapsed || 1)) || 0);
+    setWpm(Math.round(wordsTyped / elapsedMinutes));
+
     let correct = 0;
-    for (let i = 0; i < userInput.length; i++)
+    for (let i = 0; i < userInput.length; i++) {
       if (userInput[i] === currentText[i]) correct++;
-    setAccuracy(
-      userInput.length > 0 ? Math.round((correct / userInput.length) * 100) : 100
-    );
+    }
+    setAccuracy(userInput.length > 0 ? Math.round((correct / userInput.length) * 100) : 100);
   }, [userInput, lessonStart, currentText]);
 
-  // Auto next
   useEffect(() => {
     if (userInput.length >= currentText.length && !completed) {
-      const t = setTimeout(() => handleNext(), 500);
-      return () => clearTimeout(t);
+      setTimeout(() => handleNext(), 400);
     }
   }, [userInput, currentText]);
 
-  const handleTyping = (val) => {
+  const handleTyping = (val: string) => {
     if (completed) return;
     setUserInput(val);
     const last = val[val.length - 1];
     if (last) {
       setHighlightedKey(last.toUpperCase());
-      setTimeout(() => setHighlightedKey(""), 300);
+      setTimeout(() => setHighlightedKey(""), 200);
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" || e.key === "Delete") e.preventDefault();
   };
 
   const handleNext = () => {
@@ -81,30 +94,21 @@ export default function HomeRowModule() {
     }
     setTotalChars((p) => p + userInput.length);
     setTotalCorrect((p) => p + correctCount);
-    setTotalTime((p) => p + elapsed);
     setErrorMap(newErrors);
 
     if (currentIndex < lessons.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setCurrentText(lessons[currentIndex + 1]);
+      setCurrentIndex((prev) => prev + 1);
       setUserInput("");
       setLessonStart(Date.now());
+      setElapsedTime(0);
     } else {
-      const finalElapsed = (Date.now() - lessonStart) / 1000;
-      const finalTime = totalTime + finalElapsed;
-      const finalChars = totalChars + userInput.length;
-      const finalCorrect = totalCorrect + correctCount;
-      const gross = (finalChars / 5) / (finalTime / 60);
-      const acc =
-        finalChars > 0 ? Math.round((finalCorrect / finalChars) * 100) : 100;
-      setWpm(Math.round(gross));
-      setAccuracy(acc);
       setCompleted(true);
+      setTimerRunning(false);
     }
   };
 
   const handleFinish = () => {
-    const saved = JSON.parse(localStorage.getItem("typingModuleProgress")) || {};
+    const saved = JSON.parse(localStorage.getItem("typingModuleProgress") || "{}");
     saved[1] = { completed: true };
     localStorage.setItem("typingModuleProgress", JSON.stringify(saved));
     navigate("/student/learn");
@@ -119,11 +123,21 @@ export default function HomeRowModule() {
 
   const getWeakKeys = () => {
     const entries = Object.entries(errorMap);
-    if (entries.length === 0)
-      return "You made no significant key errors. Great job!";
-    const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0) return "You made no significant key errors. Great job!";
+    const sorted = entries.sort((a, b) => b[1] - a[1]);
     const top = sorted.slice(0, 3).map(([k]) => k.toUpperCase());
-    return `You had the most trouble with: ${top.join(", ")}`;
+    const fingerMap: Record<string, string> = {
+      A: "Left Pinky",
+      S: "Left Ring",
+      D: "Left Middle",
+      F: "Left Index",
+      J: "Right Index",
+      K: "Right Middle",
+      L: "Right Ring",
+      ";": "Right Pinky",
+    };
+    const fingerFeedback = top.map((k) => `${k} → ${fingerMap[k] || "Unknown Finger"}`).join(", ");
+    return `You had trouble with: ${fingerFeedback}`;
   };
 
   return (
@@ -138,7 +152,6 @@ export default function HomeRowModule() {
       <div className="absolute inset-0 bg-black/30 z-0" />
       <div className="relative z-10 p-8 min-h-screen text-white">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               <PixelButton variant="secondary" onClick={() => navigate("/student/learn")}>
@@ -146,20 +159,17 @@ export default function HomeRowModule() {
               </PixelButton>
               <Logo />
             </div>
-            <h1 className="font-pixel text-xl text-black">
-              Module 1: Home Row Keys
-            </h1>
+            <h1 className="font-pixel text-xl text-black">Module 1: Home Row Keys</h1>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             <PixelCard variant="yellow"><p className="font-pixel text-xs mb-1">Lesson</p><p className="font-pixel text-2xl">{currentIndex + 1}/10</p></PixelCard>
             <PixelCard variant="orange"><p className="font-pixel text-xs mb-1">WPM</p><p className="font-pixel text-2xl">{wpm}</p></PixelCard>
             <PixelCard variant="purple"><p className="font-pixel text-xs mb-1">Accuracy</p><p className="font-pixel text-2xl">{accuracy}%</p></PixelCard>
+            <PixelCard variant="green"><p className="font-pixel text-xs mb-1">Timer</p><p className="font-pixel text-2xl">{elapsedTime}s</p></PixelCard>
             <PixelCard variant="green"><p className="font-pixel text-xs mb-1">Progress</p><p className="font-pixel text-2xl">{Math.round(((currentIndex + 1) / lessons.length) * 100)}%</p></PixelCard>
           </div>
 
-          {/* Typing area */}
           <PixelCard className="mb-8 bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
             <div className="font-pixel text-lg mb-4 text-center">
               {currentText.split("").map((ch, i) => {
@@ -175,22 +185,18 @@ export default function HomeRowModule() {
               type="text"
               value={userInput}
               onChange={(e) => handleTyping(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={completed}
               className={`w-full px-4 py-3 font-pixel text-sm border-[3px] ${
                 completed
                   ? "bg-gray-700 border-gray-500 text-gray-400"
                   : "bg-black/70 border-yellow-300 text-white"
               }`}
-              placeholder={
-                completed
-                  ? "Module completed!"
-                  : `Lesson ${currentIndex + 1}: Type using ASDF JKL;`
-              }
+              placeholder={completed ? "Module completed!" : "Start typing..."}
               autoFocus
             />
           </PixelCard>
 
-          {/* ✅ Restored Keyboard Layout */}
           <PixelCard className="mb-8 text-center bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
             <h3 className="font-pixel text-sm mb-4 text-white">Home Row Layout</h3>
             <div className="flex justify-center gap-2">
@@ -212,7 +218,6 @@ export default function HomeRowModule() {
             </div>
           </PixelCard>
 
-          {/* Completion */}
           {completed && (
             <div className="text-center">
               <PixelCard className="inline-block p-8 bg-black/70 border-[3px] border-yellow-300 backdrop-blur-md">

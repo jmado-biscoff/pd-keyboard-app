@@ -9,54 +9,59 @@ import bgImage from "@/assets/b3.jpg";
 export default function BottomRowModule() {
   const navigate = useNavigate();
 
-  // 🔹 Bottom-row typing drills
   const lessons = [
     "z x c v n m , .",
     "zxcv nm,. zxcv nm,.",
-    "z n z n z n z n",
-    "zxcvbnm,. zxcvbnm,.",
-    "zz xx cc vv nn mm ,, ..",
+    "v c x z m n , .",
     "zxcv nm,. zxcv nm,.",
-    "zany mix calm move zoom",
-    "vex man can jam zen",
-    "z x c v n m , .",
-    "zen man can move calm",
+    "zz xx cc vv nn mm ,, ..",
+    "zc vm cn xm zn mv nc",
+    "zoom van man can jam",
+    "mix camp vex zone man",
+    "zxcv nmnv zxcv nmnv",
+    "zoom cam jam mix man zone",
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentText, setCurrentText] = useState(lessons[0]);
   const [userInput, setUserInput] = useState("");
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [completed, setCompleted] = useState(false);
-  const [lessonStart, setLessonStart] = useState(Date.now());
   const [highlightedKey, setHighlightedKey] = useState("");
-  const [totalChars, setTotalChars] = useState(0);
-  const [totalCorrect, setTotalCorrect] = useState(0);
-  const [totalTime, setTotalTime] = useState(0);
+  const [lessonStart, setLessonStart] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
   const [errorMap, setErrorMap] = useState<Record<string, number>>({});
+  const [timerRunning, setTimerRunning] = useState(true);
 
   const bottomRowLayout = [["Z", "X", "C", "V", "B", "N", "M", ",", "."]];
 
-  // 🔹 WPM + accuracy calculation
   useEffect(() => {
-    const elapsed = (Date.now() - lessonStart) / 1000 / 60;
-    const words = userInput.trim().split(" ").length;
-    setWpm(Math.round(words / (elapsed || 1)) || 0);
+    let interval: any;
+    if (timerRunning && !completed) {
+      interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - lessonStart) / 1000));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timerRunning, completed, lessonStart]);
+
+  const currentText = lessons[currentIndex];
+
+  useEffect(() => {
+    const elapsedMinutes = Math.max((Date.now() - lessonStart) / 1000 / 60, 0.01);
+    const wordsTyped = userInput.trim().split(" ").length;
+    setWpm(Math.round(wordsTyped / elapsedMinutes));
 
     let correct = 0;
-    for (let i = 0; i < userInput.length; i++)
+    for (let i = 0; i < userInput.length; i++) {
       if (userInput[i] === currentText[i]) correct++;
-    setAccuracy(
-      userInput.length ? Math.round((correct / userInput.length) * 100) : 100
-    );
+    }
+    setAccuracy(userInput.length > 0 ? Math.round((correct / userInput.length) * 100) : 100);
   }, [userInput, lessonStart, currentText]);
 
-  // 🔹 Move to next lesson when finished
   useEffect(() => {
     if (userInput.length >= currentText.length && !completed) {
-      const t = setTimeout(() => handleNext(), 500);
-      return () => clearTimeout(t);
+      setTimeout(() => handleNext(), 400);
     }
   }, [userInput, currentText]);
 
@@ -66,42 +71,32 @@ export default function BottomRowModule() {
     const last = val[val.length - 1];
     if (last) {
       setHighlightedKey(last.toUpperCase());
-      setTimeout(() => setHighlightedKey(""), 300);
+      setTimeout(() => setHighlightedKey(""), 200);
     }
   };
 
-  const handleNext = () => {
-    const elapsed = (Date.now() - lessonStart) / 1000;
-    let correctCount = 0;
-    const newErr: Record<string, number> = { ...errorMap };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" || e.key === "Delete") e.preventDefault();
+  };
 
+  const handleNext = () => {
+    const newErrors = { ...errorMap };
     for (let i = 0; i < userInput.length; i++) {
-      const exp = currentText[i];
-      const t = userInput[i];
-      if (t === exp) correctCount++;
-      else if (exp && exp !== " ") newErr[exp] = (newErr[exp] || 0) + 1;
+      const expected = currentText[i];
+      const typed = userInput[i];
+      if (typed !== expected && expected && expected !== " ")
+        newErrors[expected] = (newErrors[expected] || 0) + 1;
     }
 
-    setTotalChars((p) => p + userInput.length);
-    setTotalCorrect((p) => p + correctCount);
-    setTotalTime((p) => p + elapsed);
-    setErrorMap(newErr);
-
+    setErrorMap(newErrors);
     if (currentIndex < lessons.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setCurrentText(lessons[currentIndex + 1]);
+      setCurrentIndex((prev) => prev + 1);
       setUserInput("");
       setLessonStart(Date.now());
+      setElapsedTime(0);
     } else {
-      const finE = (Date.now() - lessonStart) / 1000;
-      const finT = totalTime + finE;
-      const finC = totalChars + userInput.length;
-      const finCor = totalCorrect + correctCount;
-      const gross = (finC / 5) / (finT / 60);
-      const acc = finC ? Math.round((finCor / finC) * 100) : 100;
-      setWpm(Math.round(gross));
-      setAccuracy(acc);
       setCompleted(true);
+      setTimerRunning(false);
     }
   };
 
@@ -112,19 +107,25 @@ export default function BottomRowModule() {
     navigate("/student/learn");
   };
 
-  const getPerformanceMessage = () =>
-    wpm >= 40 && accuracy >= 95
-      ? "Excellent control! You’ve conquered the bottom row!"
-      : wpm >= 25 && accuracy >= 85
-      ? "Nice job! Keep working on your finger precision."
-      : "Good work! Keep practicing for smoother transitions.";
+  const fingerMap: Record<string, string> = {
+    Z: "Left Pinky",
+    X: "Left Ring",
+    C: "Left Middle",
+    V: "Left Index",
+    B: "Left Index",
+    N: "Right Index",
+    M: "Right Middle",
+    ",": "Right Ring",
+    ".": "Right Pinky",
+  };
 
   const getWeakKeys = () => {
-    const ent = Object.entries(errorMap);
-    if (ent.length === 0) return "No major mistakes detected!";
-    const sorted = [...ent].sort((a, b) => b[1] - a[1]);
+    const entries = Object.entries(errorMap);
+    if (entries.length === 0) return "No key mistakes! Great job!";
+    const sorted = entries.sort((a, b) => b[1] - a[1]);
     const top = sorted.slice(0, 3).map(([k]) => k.toUpperCase());
-    return `You need more practice with: ${top.join(", ")}`;
+    const feedback = top.map((k) => `${k} → ${fingerMap[k] || "Unknown Finger"}`).join(", ");
+    return `You struggled with: ${feedback}`;
   };
 
   return (
@@ -139,7 +140,6 @@ export default function BottomRowModule() {
       <div className="absolute inset-0 bg-black/30 z-0" />
       <div className="relative z-10 p-8 min-h-screen text-white">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               <PixelButton variant="secondary" onClick={() => navigate("/student/learn")}>
@@ -147,23 +147,20 @@ export default function BottomRowModule() {
               </PixelButton>
               <Logo />
             </div>
-            <h1 className="font-pixel text-xl text-black">
-              Module 3: Bottom Row Keys
-            </h1>
+            <h1 className="font-pixel text-xl text-black">Module 3: Bottom Row Keys</h1>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             <PixelCard variant="yellow"><p className="font-pixel text-xs mb-1">Lesson</p><p className="font-pixel text-2xl">{currentIndex + 1}/10</p></PixelCard>
             <PixelCard variant="orange"><p className="font-pixel text-xs mb-1">WPM</p><p className="font-pixel text-2xl">{wpm}</p></PixelCard>
             <PixelCard variant="purple"><p className="font-pixel text-xs mb-1">Accuracy</p><p className="font-pixel text-2xl">{accuracy}%</p></PixelCard>
+            <PixelCard variant="green"><p className="font-pixel text-xs mb-1">Timer</p><p className="font-pixel text-2xl">{elapsedTime}s</p></PixelCard>
             <PixelCard variant="green"><p className="font-pixel text-xs mb-1">Progress</p><p className="font-pixel text-2xl">{Math.round(((currentIndex + 1) / lessons.length) * 100)}%</p></PixelCard>
           </div>
 
-          {/* Typing Area */}
           <PixelCard className="mb-8 bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
             <div className="font-pixel text-lg mb-4 text-center">
-              {currentText.split("").map((ch, i) => {
+              {lessons[currentIndex].split("").map((ch, i) => {
                 let c = "text-gray-400";
                 if (i < userInput.length)
                   c = userInput[i] === ch ? "text-green-400" : "text-red-500";
@@ -176,22 +173,18 @@ export default function BottomRowModule() {
               type="text"
               value={userInput}
               onChange={(e) => handleTyping(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={completed}
               className={`w-full px-4 py-3 font-pixel text-sm border-[3px] ${
                 completed
                   ? "bg-gray-700 border-gray-500 text-gray-400"
                   : "bg-black/70 border-yellow-300 text-white"
               }`}
-              placeholder={
-                completed
-                  ? "Module completed!"
-                  : `Lesson ${currentIndex + 1}: Type using ZXCV NM,.`
-              }
+              placeholder={completed ? "Module completed!" : "Type the keys above..."}
               autoFocus
             />
           </PixelCard>
 
-          {/* 🔹 Keyboard Layout */}
           <PixelCard className="mb-8 text-center bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
             <h3 className="font-pixel text-sm mb-4 text-white">Bottom Row Layout</h3>
             <div className="flex justify-center gap-2">
@@ -213,22 +206,23 @@ export default function BottomRowModule() {
             </div>
           </PixelCard>
 
-          {/* Completion Section */}
           {completed && (
             <div className="text-center">
               <PixelCard className="inline-block p-8 bg-black/70 border-[3px] border-yellow-300 backdrop-blur-md">
-                <h2 className="font-pixel text-2xl mb-4 text-yellow-200">
-                  Module Complete!
-                </h2>
-                <p className="font-pixel mb-4">{getPerformanceMessage()}</p>
+                <h2 className="font-pixel text-2xl mb-4 text-yellow-200">Module Complete!</h2>
+                <p className="font-pixel mb-4">
+                  {accuracy >= 95
+                    ? "Excellent work!"
+                    : accuracy >= 85
+                    ? "Nice job! Keep improving!"
+                    : "Focus on accuracy first."}
+                </p>
                 <p className="font-pixel mb-6 text-gray-300">{getWeakKeys()}</p>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <PixelCard className="bg-black/50 border border-yellow-200 text-center"><p className="font-pixel text-xs mb-1 text-yellow-200">WPM</p><p className="font-pixel text-2xl">{wpm}</p></PixelCard>
                   <PixelCard className="bg-black/50 border border-yellow-200 text-center"><p className="font-pixel text-xs mb-1 text-yellow-200">Accuracy</p><p className="font-pixel text-2xl">{accuracy}%</p></PixelCard>
                 </div>
-                <PixelButton variant="primary" size="lg" onClick={handleFinish}>
-                  Return to Modules
-                </PixelButton>
+                <PixelButton variant="primary" size="lg" onClick={handleFinish}>Return to Modules</PixelButton>
               </PixelCard>
             </div>
           )}

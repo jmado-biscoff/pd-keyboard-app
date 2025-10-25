@@ -8,13 +8,13 @@ import path from "path";
 // ✅ Load .env (no matter where server.ts is located)
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-
 // ✅ Import routes
 import authRoutes from "./routes/authRoutes";
 import studentRoutes from "./routes/studentRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import typingRoutes from "./routes/typingRoutes";
 import detectionRouter from "./routes/detectionRoutes";
+import resultsRoutes from "./routes/resultsRoutes";
 
 // ================================================
 // CONFIGURATION
@@ -22,7 +22,8 @@ import detectionRouter from "./routes/detectionRoutes";
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI =
-  process.env.MONGO_URI || "mongodb+srv://admin:pd-keyboard-app@cluster0.wuypmob.mongodb.net/";
+  process.env.MONGO_URI ||
+  "mongodb+srv://admin:pd-keyboard-app@cluster0.wuypmob.mongodb.net/";
 
 // ================================================
 // MIDDLEWARE
@@ -42,9 +43,12 @@ app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/teacher", teacherRoutes);
 app.use("/api/typing", typingRoutes);
+app.use("/api/detect", detectionRouter);
+app.use("/api/results", resultsRoutes);
+
+// Alternate Routes
 app.use("/api/auth/teacher", teacherRoutes);
 app.use("/api/auth/student", studentRoutes);
-app.use("/api/detect", detectionRouter);
 
 // Default route
 app.get("/", (req: Request, res: Response) => {
