@@ -1,4 +1,0 @@
-model,training_time_sec,inference_time_ms_per_sample,precision,storage_MB,maintainability_index
-MLP,50.24,25.00,0.8128,0.1775,97.72,
-BiLSTM-CRF,55.79,28.00,0.8840,0.1528,99.40,
-GRU,56.76,29.00,0.9950,0.0791,97.75,
