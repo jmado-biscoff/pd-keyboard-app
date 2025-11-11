@@ -123,6 +123,9 @@ if not cap.isOpened():
     print("❌ Cannot open camera.")
     sys.exit()
 
+# ============================================================
+# KEYBOARD CALIBRATION + TEMPORARY BOUNDING BOX DISPLAY
+# ============================================================
 print("🔧 Calibrating keyboard layout... remove hands from frame.")
 key_positions = {}
 for _ in range(20):
@@ -136,7 +139,25 @@ for _ in range(20):
         if label == "keyboard":
             continue
         key_positions[label] = tuple(map(int, box.xyxy[0]))
+
 print(f"✅ Locked {len(key_positions)} key boxes detected.")
+sys.stdout.flush()
+
+# ✅ Display bounding boxes for 3 seconds for visual confirmation
+start_time = time.time()
+while time.time() - start_time < 5:  # show for 3 seconds
+    ret, frame = cap.read()
+    if not ret:
+        continue
+    for key, (x1, y1, x2, y2) in key_positions.items():
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
+        cv2.putText(frame, key.upper(), (x1 + 3, y2 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+    cv2.putText(frame, "Calibration complete — starting in 3s...",
+                (40, 40), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 2)
+    cv2.imshow("YOLO + Mediapipe + SVM Typing Feedback", frame)
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
 
 # ============================================================
 # CSV HEADER
