@@ -1,0 +1,10 @@
+{
+  "Model": "KNN",
+  "Accuracy": 0.9478,
+  "Error Rate": 0.0522,
+  "Inference Time (ms/sample)": 0.028,
+  "Training Time (s)": 19.45,
+  "Mean Average Precision": 0.942,
+  "Maintainability Index": 68.91,
+  "Storage (MB)": 1.41
+}

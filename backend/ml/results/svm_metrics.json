@@ -1,0 +1,10 @@
+{
+  "Model": "SVM",
+  "Accuracy": 0.9651,
+  "Error Rate": 0.0349,
+  "Inference Time (ms/sample)": 0.029,
+  "Training Time (s)": 718.54,
+  "Mean Average Precision": 0.958,
+  "Maintainability Index": 68.9,
+  "Storage (MB)": 1.54
+}

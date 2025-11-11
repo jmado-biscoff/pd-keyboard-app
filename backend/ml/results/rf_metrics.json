@@ -1,0 +1,10 @@
+{
+  "Model": "Random Forest",
+  "Accuracy": 0.9599,
+  "Error Rate": 0.0401,
+  "Inference Time (ms/sample)": 0.027,
+  "Training Time (s)": 142.63,
+  "Mean Average Precision": 0.95,
+  "Maintainability Index": 69.25,
+  "Storage (MB)": 1.99
+}

@@ -1,0 +1,4 @@
+Model,Accuracy,Error Rate,Inference Time (ms/sample),Training Time (s),Mean Average Precision,Maintainability Index,Storage (MB)
+SVM,0.9651,0.0349,0.029,718.54,0.958,68.9,1.54
+KNN,0.9478,0.0522,0.028,19.45,0.942,68.91,1.41
+Random Forest,0.9599,0.0401,0.027,142.63,0.95,69.25,1.99
