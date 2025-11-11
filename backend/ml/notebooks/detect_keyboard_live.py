@@ -1,5 +1,5 @@
 # ============================================================
-# detect_keyboard_live_rule_based_letters_punct.py — AUTO-RECALIBRATING VERSION
+# detect_keyboard_live_rule_based_letters_punct.py — FULL INTEGRATION (YOLO + Mediapipe + SVM + Encoder + Scaler)
 # ============================================================
 
 import cv2
@@ -10,22 +10,25 @@ import os, csv, time, json, sys
 from datetime import datetime
 import keyboard
 import threading
+import joblib
+import pandas as pd
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
-YOLO_MODEL_PATH = r"runs/train/keyboard_key_detector/weights/best.pt"
+YOLO_MODEL_PATH = r"D:\pd-keyboard-app\backend\ml\notebooks\runs\train\keyboard_key_detector\weights\best.pt"
 CONF_THRESHOLD = 0.4
-CAMERA_INDEX = 1
+CAMERA_INDEX = 0
 FRAME_WIDTH, FRAME_HEIGHT = 1280, 720
-DRIFT_THRESHOLD = 5  # pixels — small movement triggers recalibration
+DEBOUNCE_INTERVAL = 0.25
 
-SAVE_DIR = r"E:\pd-keyboard-app\backend\ml\results_csv"
-EXPECTED_PATH = os.path.join(SAVE_DIR, "expected_words.json")
+SAVE_DIR = r"D:\pd-keyboard-app\backend\ml\testing"
+RESULTS_DIR = r"D:\pd-keyboard-app\backend\ml\results"
+
 os.makedirs(SAVE_DIR, exist_ok=True)
-csv_path = os.path.join(
-    SAVE_DIR, f"finger_key_rulebased_letters_punct_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-)
+csv_path = os.path.join(SAVE_DIR, f"finger_key_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+
+EXPECTED_PATH = os.path.join(SAVE_DIR, "expected_words.json")
 
 # ============================================================
 # LOAD EXPECTED KEYS
@@ -35,10 +38,8 @@ if os.path.exists(EXPECTED_PATH):
     with open(EXPECTED_PATH, "r") as f:
         try:
             data = json.load(f)
-            words = data.get("words", [])
-            for word in words:
-                for ch in word:
-                    expected_keys.append(ch.lower())
+            for word in data.get("words", []):
+                expected_keys.extend([ch.lower() for ch in word])
             print(f"✅ Loaded {len(expected_keys)} expected keys (SPACE excluded)")
         except Exception as e:
             print(f"⚠️ Failed to load expected keys: {e}")
@@ -47,44 +48,39 @@ else:
 current_expected_index = 0
 
 # ============================================================
-# CSV HEADER
+# LOAD MODELS
 # ============================================================
-csv_header = [
-    "timestamp", "pressed_key", "finger_name", "hand_used",
-    "finger_x", "finger_y", "key_x1", "key_y1", "key_x2", "key_y2",
-    "dx", "dy", "distance", "norm_dx", "norm_dy", "norm_distance",
-    "rule_based_label"
-]
-with open(csv_path, "w", newline="") as f:
-    csv.writer(f).writerow(csv_header)
-print(f"✅ CSV logging enabled → {csv_path}")
-sys.stdout.flush()
+try:
+    svm_model = joblib.load(os.path.join(RESULTS_DIR, "svm_model.pkl"))
+    encoder = joblib.load(os.path.join(RESULTS_DIR, "encoder.pkl"))
+    scaler = joblib.load(os.path.join(RESULTS_DIR, "scaler.pkl"))
+    print("✅ SVM, Encoder, and Scaler loaded successfully.")
+except Exception as e:
+    print(f"❌ Failed to load model/encoder/scaler: {e}")
+    sys.exit(1)
 
 # ============================================================
-# LOAD YOLO + MEDIAPIPE
+# INIT YOLO + MEDIAPIPE
 # ============================================================
 print("Loading YOLOv8 keyboard model...")
-sys.stdout.flush()
 yolo_model = YOLO(YOLO_MODEL_PATH)
 print("✅ YOLOv8 model loaded successfully.")
-sys.stdout.flush()
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.6, min_tracking_confidence=0.6)
 mp_draw = mp.solutions.drawing_utils
 
 # ============================================================
-# RULE-BASED TOUCH TYPING MAP
+# TOUCH TYPING MAP
 # ============================================================
 TOUCH_TYPING_MAP = {
     "a": ("left", "pinky"), "s": ("left", "ring"), "d": ("left", "middle"), "f": ("left", "index"),
     "g": ("left", "index"), "h": ("right", "index"), "j": ("right", "index"), "k": ("right", "middle"),
-    "l": ("right", "ring"),
-    "q": ("left", "pinky"), "w": ("left", "ring"), "e": ("left", "middle"), "r": ("left", "index"),
-    "t": ("left", "index"), "y": ("right", "index"), "u": ("right", "index"), "i": ("right", "middle"),
-    "o": ("right", "ring"), "p": ("right", "pinky"),
-    "z": ("left", "pinky"), "x": ("left", "ring"), "c": ("left", "middle"), "v": ("left", "index"),
-    "b": ("left", "index"), "n": ("right", "index"), "m": ("right", "index"),
+    "l": ("right", "ring"), "q": ("left", "pinky"), "w": ("left", "ring"), "e": ("left", "middle"),
+    "r": ("left", "index"), "t": ("left", "index"), "y": ("right", "index"), "u": ("right", "index"),
+    "i": ("right", "middle"), "o": ("right", "ring"), "p": ("right", "pinky"), "z": ("left", "pinky"),
+    "x": ("left", "ring"), "c": ("left", "middle"), "v": ("left", "index"), "b": ("left", "index"),
+    "n": ("right", "index"), "m": ("right", "index"),
 }
 
 # ============================================================
@@ -93,7 +89,6 @@ TOUCH_TYPING_MAP = {
 pressed_key = None
 last_logged_key = None
 last_sent_time = 0
-DEBOUNCE_INTERVAL = 0.25  # seconds
 
 def key_listener():
     global pressed_key
@@ -102,7 +97,13 @@ def key_listener():
         event = keyboard.read_event(suppress=False)
         if event.event_type == keyboard.KEY_DOWN:
             name = event.name
-            key_name = name if len(name) == 1 else (name if name in ["space", "enter", "backspace", "shift", "ctrl", "tab", "caps lock"] else None)
+            if len(name) == 1:
+                key_name = name
+            elif name in ["space", "enter", "backspace"]:
+                key_name = name
+            else:
+                key_name = None
+
             if key_name and key_name != last_key:
                 pressed_key = key_name
                 last_key = key_name
@@ -113,51 +114,43 @@ def key_listener():
 threading.Thread(target=key_listener, daemon=True).start()
 
 # ============================================================
-# CAMERA SETUP
+# CAMERA INITIALIZATION + CALIBRATION
 # ============================================================
 cap = cv2.VideoCapture(CAMERA_INDEX)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
 if not cap.isOpened():
-    print("❌ Error: Cannot open camera.")
+    print("❌ Cannot open camera.")
     sys.exit()
 
-# ============================================================
-# CALIBRATION FUNCTION
-# ============================================================
-def calibrate_keyboard():
-    print("🔧 Calibrating keyboard layout... remove hands from frame.")
-    sys.stdout.flush()
-    detected = {}
-    for _ in range(20):
-        ret, frame = cap.read()
-        if not ret:
+print("🔧 Calibrating keyboard layout... remove hands from frame.")
+key_positions = {}
+for _ in range(20):
+    ret, frame = cap.read()
+    if not ret:
+        continue
+    results = yolo_model.predict(frame, conf=CONF_THRESHOLD, verbose=False)
+    for box in results[0].boxes:
+        cls_id = int(box.cls[0])
+        label = results[0].names[cls_id].lower()
+        if label == "keyboard":
             continue
-        results = yolo_model.predict(frame, conf=CONF_THRESHOLD, verbose=False)
-        for box in results[0].boxes:
-            cls_id = int(box.cls[0])
-            label = results[0].names[cls_id].lower()
-            if label == "keyboard":
-                continue
-            detected[label] = tuple(map(int, box.xyxy[0]))
-    print(f"✅ Locked {len(detected)} key boxes detected.")
-    sys.stdout.flush()
-    return detected
-
-key_positions = calibrate_keyboard()
-prev_keyboard_box = None
+        key_positions[label] = tuple(map(int, box.xyxy[0]))
+print(f"✅ Locked {len(key_positions)} key boxes detected.")
 
 # ============================================================
-# FUNCTION: CHECK FOR DRIFT
+# CSV HEADER
 # ============================================================
-def has_drifted(prev_box, new_box):
-    if prev_box is None or new_box is None:
-        return True
-    diff = np.abs(np.array(prev_box) - np.array(new_box))
-    return np.any(diff > DRIFT_THRESHOLD)
+csv_header = [
+    "timestamp", "pressed_key", "finger_name", "hand_used",
+    "dx", "dy", "distance", "norm_dx", "norm_dy", "norm_distance",
+    "rule_based_label", "ml_label"
+]
+with open(csv_path, "w", newline="") as f:
+    csv.writer(f).writerow(csv_header)
 
 # ============================================================
-# MAIN LOOP
+# MAIN DETECTION LOOP
 # ============================================================
 while True:
     ret, frame = cap.read()
@@ -165,32 +158,9 @@ while True:
         break
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = yolo_model.predict(frame, conf=CONF_THRESHOLD, verbose=False)
-
-    # Track keyboard position
-    current_keyboard_box = None
-    for box in results[0].boxes:
-        label = results[0].names[int(box.cls[0])].lower()
-        if label == "keyboard":
-            current_keyboard_box = tuple(map(int, box.xyxy[0]))
-            break
-
-    # Auto recalibration if keyboard moved slightly
-    if has_drifted(prev_keyboard_box, current_keyboard_box):
-        print("⚙️ Keyboard moved — recalibrating...")
-        key_positions = calibrate_keyboard()
-        prev_keyboard_box = current_keyboard_box
-    elif current_keyboard_box is not None:
-        prev_keyboard_box = current_keyboard_box
-
-    # Draw bounding boxes for keys
-    for key, (x1, y1, x2, y2) in key_positions.items():
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (100, 255, 100), 1)
-        cv2.putText(frame, key.upper(), (x1 + 3, y2 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (50, 255, 50), 1)
-
-    # Process hands
     results_hands = hands.process(rgb)
     detected_fingers = []
+
     if results_hands.multi_hand_landmarks:
         for hand_landmarks in results_hands.multi_hand_landmarks:
             x_mean = np.mean([lm.x for lm in hand_landmarks.landmark])
@@ -203,15 +173,16 @@ while True:
                 cv2.circle(frame, (fx, fy), 6, (0, 255, 255), -1)
 
     expected_key = expected_keys[current_expected_index] if current_expected_index < len(expected_keys) else None
-    now = time.time()
 
-    # Detect and log keypresses
+    now = time.time()
     if pressed_key and (pressed_key != last_logged_key or (now - last_sent_time) > DEBOUNCE_INTERVAL):
         key = pressed_key.lower()
         last_logged_key = key
         last_sent_time = now
+
         if key == "space" or key not in TOUCH_TYPING_MAP:
             continue
+
         if key in key_positions and detected_fingers:
             x1, y1, x2, y2 = key_positions[key]
             key_cx, key_cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -225,49 +196,63 @@ while True:
 
             if closest_finger:
                 dx, dy = fx - key_cx, fy - key_cy
+                distance = np.sqrt(dx**2 + dy**2)
                 norm_dx, norm_dy = dx / FRAME_WIDTH, dy / FRAME_HEIGHT
-                norm_dist = min_dist / np.sqrt(FRAME_WIDTH**2 + FRAME_HEIGHT**2)
+                norm_distance = distance / np.sqrt(FRAME_WIDTH**2 + FRAME_HEIGHT**2)
+
+                # Rule-based label
                 expected_hand, expected_finger = TOUCH_TYPING_MAP.get(key, ("unknown", "unknown"))
-                rule_based_correct = (expected_finger == closest_finger and (expected_hand == hand_used or expected_hand == "both"))
-                json_correct = (expected_key == key) if expected_key else True
-                overall_correct = rule_based_correct and json_correct
-                rule_label = "Correct" if overall_correct else "Incorrect"
-                color = (0, 255, 0) if overall_correct else (0, 0, 255)
+                rule_based_correct = (expected_finger == closest_finger and (expected_hand == hand_used))
+                rule_label = "Correct" if rule_based_correct else "Incorrect"
+
+                # ============================================================
+                # ML INFERENCE USING ENCODER + SCALER + SVM
+                # ============================================================
+                cat_df = pd.DataFrame([[key.upper(), closest_finger.title(), hand_used.title()]],
+                                    columns=["pressed_key", "finger_name", "hand_used"])
+
+                num_df = pd.DataFrame([[dx, dy, min_dist, norm_dx, norm_dy, norm_distance]],
+                                    columns=["dx", "dy", "distance", "norm_dx", "norm_dy", "norm_distance"])
+
+                encoded = pd.DataFrame(encoder.transform(cat_df),
+                                       columns=encoder.get_feature_names_out(["pressed_key", "finger_name", "hand_used"]))
+                scaled = pd.DataFrame(scaler.transform(num_df),
+                                      columns=[f"{col}_scaled" for col in num_df.columns])
+
+                features = pd.concat([encoded, scaled], axis=1)
+
+                ml_pred = svm_model.predict(features)[0]
+                ml_label = "Correct" if ml_pred == 1 else "Incorrect"
 
                 # Display feedback
-                cv2.putText(frame, f"{key.upper()} | Exp: {expected_key or '-'} | {rule_label}",
+                color = (0, 255, 0) if ml_label == "Correct" else (0, 0, 255)
+                cv2.putText(frame, f"{key.upper()} | ML: {ml_label} | RB: {rule_label}",
                             (40, 60), cv2.FONT_HERSHEY_DUPLEX, 1.0, color, 2)
 
-                # Save dataset row
+                # Save to CSV
                 with open(csv_path, "a", newline="") as f:
                     csv.writer(f).writerow([
                         time.time(), key, closest_finger, hand_used,
-                        fx, fy, x1, y1, x2, y2, dx, dy, min_dist,
-                        norm_dx, norm_dy, norm_dist, rule_label
+                        dx, dy, distance, norm_dx, norm_dy, norm_distance,
+                        rule_label, ml_label
                     ])
 
-                # Console output
-                result = {
-                    "expected_key": expected_key.upper() if expected_key else None,
+                print(json.dumps({
                     "key": key.upper(),
                     "finger": closest_finger,
                     "hand": hand_used,
-                    "correct": overall_correct
-                }
-                print(json.dumps(result))
+                    "rule_label": rule_label,
+                    "ml_label": ml_label
+                }))
                 sys.stdout.flush()
-
-                if expected_key is not None:
-                    current_expected_index += 1
 
     elif not pressed_key:
         last_logged_key = None
 
-    cv2.imshow("YOLO + Rule-Based Typing Feedback", frame)
+    cv2.imshow("YOLO + Mediapipe + SVM Typing Feedback", frame)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
 cv2.destroyAllWindows()
 print(f"✅ Session complete. Data saved to: {csv_path}")
-sys.stdout.flush()
