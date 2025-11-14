@@ -7,6 +7,12 @@ import { ArrowLeft } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
 
+declare global {
+  interface Window {
+    typedBuffer: string;
+  }
+}
+
 // ============================================================
 // Session Report Interface (Phase 1 – Metrics Foundation)
 // ============================================================
@@ -54,6 +60,12 @@ export default function PlaySession() {
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
   const [lastKey, setLastKey] = useState<string | null>(null);
+  const firstKeyTimeRef = useRef<number | null>(null);
+  const endTimeRef = useRef<number | null>(null);
+  const [completedExpected, setCompletedExpected] = useState(0);
+  
+
+  
 
   // ✅ NEW: Track last detection signature to prevent duplicate counting
   const lastEventRef = useRef<string | null>(null);
@@ -206,16 +218,82 @@ export default function PlaySession() {
     }
   };
 
-  // ============================================================
-  // WPM + Accuracy
-  // ============================================================
-  useEffect(() => {
-    const correctCount = typedWords.filter((typed, i) => typed && typed === words[i]).length;
-    const totalTyped = typedWords.filter(Boolean).length;
-    const accuracyVal = totalTyped > 0 ? Math.round((correctCount / totalTyped) * 100) : 100;
-    const timeElapsed = (Date.now() - startTime) / 1000 / 60;
-    setAccuracy(accuracyVal);
-  }, [typedWords, startTime]);
+// ============================================================
+// WPM + Accuracy Calculation
+// ============================================================
+useEffect(() => {
+  // --------------------------
+  // 1. START TIMER ON FIRST VALID PYTHON KEY
+  // --------------------------
+  if (
+    firstKeyTimeRef.current === null &&
+    lastKey !== null && /^[A-Za-z]$/.test(lastKey)
+  ) {
+    firstKeyTimeRef.current = Date.now();
+  }
+
+  // --------------------------
+  // 2. COUNT EXPECTED WORD COMPLETION
+  // --------------------------
+  const expectedWord = words[completedExpected]?.toUpperCase() || "";
+
+  if (!window.typedBuffer) window.typedBuffer = "";
+  if (lastKey && /^[A-Za-z]$/.test(lastKey)) {
+    window.typedBuffer += lastKey;
+  }
+
+  if (
+    expectedWord.length > 0 &&
+    window.typedBuffer.toUpperCase().endsWith(expectedWord)
+  ) {
+    setCompletedExpected((prev) => {
+      const next = prev + 1;
+
+      // 🔥 STOP TIMER PROPERLY WHEN LAST WORD IS DONE
+      if (next >= words.length && endTimeRef.current === null) {
+        endTimeRef.current = Date.now();
+      }
+
+      return next;
+    });
+
+    window.typedBuffer = "";
+  }
+
+  // --------------------------
+  // 3. ACCURACY (finger-based)
+  // --------------------------
+  const totalFingerEvents = correctCount + incorrectCount;
+
+  const accuracyVal =
+    totalFingerEvents > 0
+      ? Math.round((correctCount / totalFingerEvents) * 100)
+      : 100;
+
+  setAccuracy(accuracyVal);
+
+  // --------------------------
+  // 4. REAL-TIME WPM UPDATE
+  // --------------------------
+  const interval = setInterval(() => {
+    if (firstKeyTimeRef.current !== null) {
+      const now =
+        endTimeRef.current !== null
+          ? endTimeRef.current
+          : Date.now();
+
+      const minutesElapsed =
+        (now - firstKeyTimeRef.current) / 1000 / 60;
+
+      if (minutesElapsed > 0) {
+        const wpmVal = Math.round(completedExpected / minutesElapsed);
+        setWpm(wpmVal);
+      }
+    }
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [lastKey, completedExpected, words, correctCount, incorrectCount]);
 
   // ============================================================
   // Detection Start/Stop
@@ -238,13 +316,21 @@ export default function PlaySession() {
   };
 
   const handleStopDetection = async () => {
-    try {
-      await stopDetection();
-      setDetecting(false);
-    } catch (err) {
-      console.error("Failed to stop detection:", err);
+  try {
+    await stopDetection();
+    setDetecting(false);
+
+    // 🔥 STOP WPM TIMER IMMEDIATELY
+    if (endTimeRef.current === null) {
+      endTimeRef.current = Date.now();
     }
-  };
+
+    // 🔥 STOP all detection-based typing buffer logic
+    window.typedBuffer = "";
+  } catch (err) {
+    console.error("Failed to stop detection:", err);
+  }
+};
 
   useEffect(() => {
     const start = async () => await handleStartDetection();
@@ -258,62 +344,78 @@ export default function PlaySession() {
   // Real-time Detection Sync + Error Logging (deduped)
   // ============================================================
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await getDetectionStatus();
-        if (!res || !res.key) return;
+  const interval = setInterval(async () => {
+    try {
+      const res = await getDetectionStatus();
+      if (!res || !res.key) return;
 
-        const key = String(res.key).toUpperCase();
-        if (key === " " || key === "SPACE") return;
+      // Normalize to uppercase (Python also sends uppercase)
+      const key = String(res.key).toUpperCase();
+      if (!key || key === " " || key === "SPACE") return;
 
-        const expectedKey = res.expected_key ? String(res.expected_key).toUpperCase() : key;
-        const isCorrect = res.correct === true;
+      const expectedKey = res.expected_key
+        ? String(res.expected_key).toUpperCase()
+        : key;
 
-        // Build unique signature for deduplication
-        const signature = JSON.stringify({
-          key,
-          expectedKey,
-          correct: isCorrect,
-          ts: res.ts || res.time || res.event_id || null,
-        });
+      const mlCorrect = res.ml_label === "Correct";
 
-        if (lastEventRef.current === signature) return;
-        lastEventRef.current = signature;
+      // ============================================================
+      // FINAL FRONTEND DECISION:
+      // CORRECT only if:
+      // 1. ML says "Correct"
+      // 2. Pressed key == expected key
+      // ============================================================
+      const isCorrectFinal = mlCorrect && key === expectedKey;
 
-        // ✅ Highlight detected key
-        setActiveKeys((prev) => ({
-          ...prev,
-          [key]: isCorrect ? "bg-green-500 text-white" : "bg-red-500 text-white",
-        }));
+      // Deduplication signature (prevents infinite counting)
+      const signature = JSON.stringify({
+        key,
+        expectedKey,
+        ml_label: res.ml_label,
+      });
 
-        // ✅ Update counters once per new detection
-        if (isCorrect) setCorrectCount((prev) => prev + 1);
-        else setIncorrectCount((prev) => prev + 1);
+      if (lastEventRef.current === signature) return;
+      lastEventRef.current = signature;
 
-        setLastKey(key);
+      // Highlight keyboard UI
+      setActiveKeys((prev) => ({
+        ...prev,
+        [key]: isCorrectFinal
+          ? "bg-green-500 text-white"
+          : "bg-red-500 text-white",
+      }));
 
-        // 🧠 NEW: Capture incorrect detections
-        if (!isCorrect && expectedKey && key !== expectedKey) {
+      // Count correct/incorrect
+      if (isCorrectFinal) {
+        setCorrectCount((prev) => prev + 1);
+      } else {
+        setIncorrectCount((prev) => prev + 1);
+
+        // Add ergonomic correction feedback
+        if (expectedKey) {
           const correctionTip = getCorrectionTip(expectedKey);
           setErrorHistory((prev) => {
             const exists = prev.some(
               (err) => err.expected === expectedKey && err.pressed === key
             );
             if (exists) return prev;
-            const updated = [
+
+            return [
               ...prev,
               { expected: expectedKey, pressed: key, tip: correctionTip },
-            ];
-            return updated.slice(-50); // keep last 50 errors max
+            ].slice(-50);
           });
         }
-      } catch (err) {
-        console.error("Detection sync error:", err);
       }
-    }, 300);
 
-    return () => clearInterval(interval);
-  }, []); // ✅ Run once only
+      setLastKey(key);
+    } catch (err) {
+      console.error("Detection sync error:", err);
+    }
+  }, 250);
+
+  return () => clearInterval(interval);
+}, []);
 
   // ============================================================
   // Render top letters (purple highlight)
@@ -544,7 +646,7 @@ export default function PlaySession() {
               {errorHistory.length > 0 && (
                 <>
                   <hr className="border-border w-1/2 my-3" />
-                  <p className="font-pixel text-md text-red-500 mb-2">❌ Common Mistakes</p>
+                  <p className="font-pixel text-md text-red-500 mb-2">❌ Mistakes</p>
                   <div className="flex flex-col gap-1 items-center text-xs text-muted-foreground">
                     {errorHistory.slice(-5).map((err, idx) => (
                       <p key={idx}>

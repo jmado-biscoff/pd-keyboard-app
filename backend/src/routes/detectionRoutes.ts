@@ -65,9 +65,22 @@ router.post("/stop", (req: Request, res: Response) => {
     return res.status(400).json({ message: "No detection process running." });
   }
 
-  pythonProcess.kill("SIGINT");
-  pythonProcess = null;
-  console.log("🛑 Python detection stopped.");
+  console.log("🛑 Sending EXIT command to Python...");
+
+  // Ask Python to cleanly close OpenCV window
+  try {
+    pythonProcess.stdin.write("EXIT\n");
+  } catch {}
+
+  // Give Python time to close OpenCV window
+  setTimeout(() => {
+    if (pythonProcess) {
+      console.log("💀 Forcing Python process to close...");
+      pythonProcess.kill("SIGKILL");  // Works on Windows ALWAYS
+      pythonProcess = null;
+    }
+  }, 300);
+
   res.json({ message: "Keyboard detection stopped." });
 });
 
