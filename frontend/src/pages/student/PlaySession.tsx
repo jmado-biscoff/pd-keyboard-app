@@ -57,6 +57,7 @@ export default function PlaySession() {
   const [detecting, setDetecting] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationDone, setCalibrationDone] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
   const [lastKey, setLastKey] = useState<string | null>(null);
@@ -64,9 +65,6 @@ export default function PlaySession() {
   const endTimeRef = useRef<number | null>(null);
   const [completedExpected, setCompletedExpected] = useState(0);
   
-
-  
-
   // ✅ NEW: Track last detection signature to prevent duplicate counting
   const lastEventRef = useRef<string | null>(null);
 
@@ -299,21 +297,23 @@ useEffect(() => {
   // Detection Start/Stop
   // ============================================================
   const handleStartDetection = async () => {
-    try {
-      setIsCalibrating(true);
-      setCalibrationDone(false);
-      await startDetection();
-      setDetecting(true);
-      setTimeout(() => {
-        setIsCalibrating(false);
-        setCalibrationDone(true);
-        setTimeout(() => setCalibrationDone(false), 3000);
-      }, 10000);
-    } catch (err) {
-      console.error("Failed to start detection:", err);
+  try {
+    setDetectionError(null);
+    setIsCalibrating(true);
+    setCalibrationDone(false);
+
+    await startDetection();
+    setDetecting(true);
+
+    setTimeout(() => {
       setIsCalibrating(false);
-    }
-  };
+    }, 5000);
+
+  } catch (err) {
+    console.error("Failed to start detection:", err);
+    setIsCalibrating(false);
+  }
+};
 
   const handleStopDetection = async () => {
   try {
@@ -347,37 +347,48 @@ useEffect(() => {
   const interval = setInterval(async () => {
     try {
       const res = await getDetectionStatus();
-      if (!res || !res.key) return;
+      if (!res) return;
 
-      // Normalize to uppercase (Python also sends uppercase)
+      // 🔥 HARD VALIDATION — keyboard detection accuracy
+      if (typeof res.locked_keys === "number") {
+        if (res.locked_keys === 0) {
+          setDetectionError("No keyboard detected.");
+          setDetecting(false);
+          return;
+        }
+
+        if (res.locked_keys < 27) {
+          setDetectionError(
+            "Some keys were not detected. Please adjust the orientation of your keyboard."
+          );
+          setDetecting(false);
+          return;
+        }
+      }
+
+      // Existing backend error
+      if (res.error) {
+        setDetectionError(res.message);
+        setDetecting(false);
+        return;
+      }
+
+      if (!res.key) return;
+
       const key = String(res.key).toUpperCase();
-      if (!key || key === " " || key === "SPACE") return;
+      if (!/^[A-Z]$/.test(key)) return;
 
       const expectedKey = res.expected_key
         ? String(res.expected_key).toUpperCase()
         : key;
 
       const mlCorrect = res.ml_label === "Correct";
-
-      // ============================================================
-      // FINAL FRONTEND DECISION:
-      // CORRECT only if:
-      // 1. ML says "Correct"
-      // 2. Pressed key == expected key
-      // ============================================================
       const isCorrectFinal = mlCorrect && key === expectedKey;
 
-      // Deduplication signature (prevents infinite counting)
-      const signature = JSON.stringify({
-        key,
-        expectedKey,
-        ml_label: res.ml_label,
-      });
-
+      const signature = JSON.stringify({ key, expectedKey, ml_label: res.ml_label });
       if (lastEventRef.current === signature) return;
       lastEventRef.current = signature;
 
-      // Highlight keyboard UI
       setActiveKeys((prev) => ({
         ...prev,
         [key]: isCorrectFinal
@@ -385,27 +396,10 @@ useEffect(() => {
           : "bg-red-500 text-white",
       }));
 
-      // Count correct/incorrect
       if (isCorrectFinal) {
         setCorrectCount((prev) => prev + 1);
       } else {
         setIncorrectCount((prev) => prev + 1);
-
-        // Add ergonomic correction feedback
-        if (expectedKey) {
-          const correctionTip = getCorrectionTip(expectedKey);
-          setErrorHistory((prev) => {
-            const exists = prev.some(
-              (err) => err.expected === expectedKey && err.pressed === key
-            );
-            if (exists) return prev;
-
-            return [
-              ...prev,
-              { expected: expectedKey, pressed: key, tip: correctionTip },
-            ].slice(-50);
-          });
-        }
       }
 
       setLastKey(key);
@@ -543,6 +537,27 @@ useEffect(() => {
             ) : (
               <p className="font-pixel text-lg text-green-500">✅ Calibration Complete!</p>
             )}
+          </PixelCard>
+        </div>
+      )}
+      {detectionError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-50">
+          <PixelCard className="p-8 text-center max-w-md">
+            <p className="font-pixel text-lg text-red-500 mb-4">
+              ❌ Keyboard Detection Error
+            </p>
+            <p className="font-pixel text-sm text-muted-foreground mb-6">
+              {detectionError}
+            </p>
+            <PixelButton
+              variant="primary"
+              onClick={() => {
+                setDetectionError(null);
+                handleStartDetection();
+              }}
+            >
+              🔄 Retry Detection
+            </PixelButton>
           </PixelCard>
         </div>
       )}

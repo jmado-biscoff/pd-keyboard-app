@@ -24,6 +24,9 @@ CONF_THRESHOLD = 0.4
 CAMERA_INDEX = 1
 FRAME_WIDTH, FRAME_HEIGHT = 1280, 720
 DEBOUNCE_INTERVAL = 0.25
+calibration_done = False
+calibration_frame = None
+latest_frame = None
 
 SAVE_DIR = r"E:\pd-keyboard-app\backend\ml\testing"
 RESULTS_DIR = r"E:\pd-keyboard-app\backend\ml\results"
@@ -43,6 +46,10 @@ cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 # ============================================================
 # UNIVERSAL EXPECTED WORDS PARSER (WORDS or LETTERS or MIXED)
 # ============================================================
+
+def is_allowed_key(label: str) -> bool:
+    return (len(label) == 1 and label.isalpha()) or label == "space"
+
 expected_keys: list[str] = []
 
 if os.path.exists(EXPECTED_PATH):
@@ -133,6 +140,15 @@ def key_listener():
 
 threading.Thread(target=key_listener, daemon=True).start()
 
+def mouse_callback(event, x, y, flags, param):
+    global calibration_done, calibration_frame, latest_frame
+    if event == cv2.EVENT_LBUTTONDOWN:
+        if latest_frame is not None:
+            calibration_done = True
+            calibration_frame = latest_frame.copy()
+            print("🖱️ Calibration locked by mouse click")
+
+
 # ============================================================
 # CAMERA INITIALIZATION + CALIBRATION
 # ============================================================
@@ -146,54 +162,99 @@ if not cap.isOpened():
 # ============================================================
 # KEYBOARD CALIBRATION + TEMPORARY BOUNDING BOX DISPLAY
 # ============================================================
-print("🔧 Calibrating keyboard layout... remove hands from frame.")
+print("🖱️ Click anywhere to CALIBRATE keyboard layout")
+
 key_positions = {}
-for _ in range(20):
+cv2.setMouseCallback(WINDOW_NAME, mouse_callback)
+
+while not calibration_done:
     ret, frame = cap.read()
     if not ret:
         continue
+
+    latest_frame = frame.copy() 
+
     results = yolo_model.predict(frame, conf=CONF_THRESHOLD, verbose=False)
+
+    temp_positions = {}
+    temp_conf = {}
+    YOLO_LABEL_FIX = {
+        "y": "z",
+        "z": "y",
+    }
+
     for box in results[0].boxes:
         cls_id = int(box.cls[0])
-        label = results[0].names[cls_id].lower()
-        if label == "keyboard":
+        raw_label = results[0].names[cls_id].lower()
+        label = YOLO_LABEL_FIX.get(raw_label, raw_label)
+        conf = float(box.conf[0])
+
+        if not is_allowed_key(label):
             continue
-        key_positions[label] = tuple(map(int, box.xyxy[0]))
 
-print(f"✅ Locked {len(key_positions)} key boxes detected.")
-sys.stdout.flush()
+        # ✅ keep ONLY the highest-confidence box per key label
+        if label not in temp_conf or conf > temp_conf[label]:
+            temp_conf[label] = conf
+            temp_positions[label] = tuple(map(int, box.xyxy[0]))
 
-# ✅ Use single window for calibration + live
-start_time = time.time()
-while time.time() - start_time < 5:  # show for ~5 seconds
-    ret, frame = cap.read()
-    if not ret:
-        continue
-    for key, (x1, y1, x2, y2) in key_positions.items():
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
+    # 🔍 Draw LIVE preview (after deduplication)
+    for label, (x1, y1, x2, y2) in temp_positions.items():
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 1)
         cv2.putText(
             frame,
-            key.upper(),
+            label.upper(),
             (x1 + 3, y2 - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.4,
-            (0, 255, 0),
+            (0, 255, 255),
             1,
         )
+
     cv2.putText(
         frame,
-        "Calibration complete — starting...",
+        "CLICK to calibrate keyboard",
         (40, 40),
         cv2.FONT_HERSHEY_DUPLEX,
-        0.8,
-        (255, 255, 255),
+        0.9,
+        (0, 255, 255),
         2,
     )
+
     cv2.imshow(WINDOW_NAME, frame)
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    cv2.waitKey(1)
+
+    # When clicked → freeze
+    if calibration_done:
+        key_positions = temp_positions.copy()
         break
 
+locked_key_count = len(key_positions)
 
+if locked_key_count == 0:
+    print(json.dumps({
+        "status": "error",
+        "reason": "NO_KEYBOARD",
+        "message": "No keyboard detected."
+    }))
+    sys.stdout.flush()
+    sys.exit(1)
+
+elif locked_key_count < 27:
+    print(json.dumps({
+        "status": "error",
+        "reason": "PARTIAL_KEYBOARD",
+        "message": "Some keys were not detected. Please adjust the orientation of your keyboard.",
+        "detected_keys": locked_key_count
+    }))
+    sys.stdout.flush()
+    sys.exit(1)
+
+else:
+    print(json.dumps({
+        "status": "ok",
+        "locked_keys": locked_key_count
+    }))
+    sys.stdout.flush()
 
 # ============================================================
 # CSV HEADER — now includes expected_key instead of rule_based_label
