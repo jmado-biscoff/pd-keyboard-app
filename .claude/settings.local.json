@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cmd /c \"cd e:\\\\pd-keyboard-app\\\\frontend && npx tsc --noEmit\")",
+      "Bash(cmd /c \"dir e:\\\\pd-keyboard-app\")",
+      "Bash(cmd /c \"dir /a e:\\\\pd-keyboard-app\"\")",
+      "Bash(cmd /c \"dir /a e:\\\\pd-keyboard-app\")",
+      "Bash(powershell -Command:*)",
+      "Bash(npx vite build)",
+      "Bash(npm run build:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm run build:dev:*)"
+    ]
+  }
+}
