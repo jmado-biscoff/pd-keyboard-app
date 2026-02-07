@@ -30,7 +30,7 @@ export const MetricsPanel = ({
       </PixelCard>
 
       <PixelCard variant="yellow" className="p-2.5 text-center">
-        <p className="font-pixel text-[8px] uppercase tracking-widest text-white/70 mb-0.5">WPM</p>
+        <p className="font-pixel text-[8px] uppercase tracking-widest text-white/70 mb-0.5">Gross WPM</p>
         <p className="font-pixel text-xl text-white drop-shadow transition-all duration-300">{wpm}</p>
       </PixelCard>
 
@@ -55,9 +55,8 @@ export const MetricsPanel = ({
         </div>
         <p className="font-pixel text-[8px] uppercase tracking-widest text-white/70 mb-0.5 relative">Timer</p>
         <p
-          className={`font-pixel text-2xl text-white drop-shadow relative ${
-            timeLeft <= 10 ? "text-red-200" : ""
-          }`}
+          className={`font-pixel text-2xl text-white drop-shadow relative ${timeLeft <= 10 ? "text-red-200" : ""
+            }`}
         >
           {timeLeft < 10 ? "0" : ""}{timeLeft}
         </p>

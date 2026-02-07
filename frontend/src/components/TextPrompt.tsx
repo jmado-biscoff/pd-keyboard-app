@@ -79,24 +79,35 @@ export const TextPrompt = ({
             willChange: "transform",
           }}
         >
-          {charsBefore.split("").map((ch, i) => {
-            const feedback = charFeedback[i];
-            const colorClass = feedback === "correct"
-              ? "text-green-400" // #4ade80
-              : feedback === "incorrect"
-                ? "text-red-400" // #f87171
-                : "text-muted-foreground/30";
+          {(() => {
+            // ✅ Strict Index Counter - only counts non-space characters to match AI pointer
+            let strictIndex = 0;
+            return charsBefore.split("").map((ch, visualIndex) => {
+              // Only look up feedback for non-space characters using strict index
+              const feedback = ch === " " ? undefined : charFeedback[strictIndex];
 
-            return (
-              <span
-                key={`b-${i}`}
-                className={`font-pixel text-xl ${colorClass} inline-block transition-colors duration-150`}
-                style={{ width: `${CHAR_WIDTH}px`, textAlign: "center" }}
-              >
-                {ch === " " ? "\u00A0" : ch}
-              </span>
-            );
-          })}
+              // Increment strict counter only for non-space characters
+              if (ch !== " ") {
+                strictIndex++;
+              }
+
+              const colorClass = feedback === "correct"
+                ? "text-green-400" // #4ade80
+                : feedback === "incorrect"
+                  ? "text-red-400" // #f87171
+                  : "text-muted-foreground/30";
+
+              return (
+                <span
+                  key={`b-${visualIndex}`}
+                  className={`font-pixel text-xl ${colorClass} inline-block transition-colors duration-150`}
+                  style={{ width: `${CHAR_WIDTH}px`, textAlign: "center" }}
+                >
+                  {ch === " " ? "\u00A0" : ch}
+                </span>
+              );
+            });
+          })()}
 
           <span
             className="font-pixel text-xl text-foreground inline-block bg-purple-500/25 border-b-2 border-purple-500 rounded-sm"

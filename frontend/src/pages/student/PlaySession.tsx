@@ -10,7 +10,23 @@ import { ErrorQueue } from "@/components/ErrorQueue";
 import { CalibrationOverlay } from "@/components/CalibrationOverlay";
 import { DetectionErrorOverlay } from "@/components/DetectionErrorOverlay";
 import { SessionComplete } from "@/components/SessionComplete";
+import { FingerErrorModal } from "@/components/session/FingerErrorModal";
 import { ArrowLeft } from "lucide-react";
+import { analyzeSession, formatMetricsForDatabase } from "@/utils/displayBrain";
+import {
+  getCorrectionTip,
+  getKeyColor,
+  startDetection,
+  stopDetection,
+  getDetectionStatus,
+  setExpectedKeys,
+} from "@/utils/typingHelpers";
+import type {
+  ErrorHistoryEntry,
+  SessionReport,
+  ErrorQueueEntry,
+  SessionHistoryEntry,
+} from "@/types/typing";
 
 const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
 
@@ -18,41 +34,6 @@ declare global {
   interface Window {
     typedBuffer: string;
   }
-}
-
-// ============================================================
-// Session Report Interface (Phase 1 – Metrics Foundation)
-// ============================================================
-interface SessionReport {
-  wpm: number;
-  accuracy: number;
-  correct_keystrokes: number;
-  incorrect_keystrokes: number;
-  fingerAccuracy: number;       // % of correct finger-to-key matches
-  timingVariance: number;       // key interval variance in ms
-  session_duration_sec: number; // total session time
-}
-
-// ============================================================
-// Error Queue Entry
-// ============================================================
-interface ErrorQueueEntry {
-  id: number;
-  type: "incorrect_key" | "incorrect_finger";
-  description: string;
-}
-
-async function startDetection() {
-  const res = await fetch(`${BASE_URL}/api/detect/start`, { method: "POST" });
-  return res.json();
-}
-async function stopDetection() {
-  const res = await fetch(`${BASE_URL}/api/detect/stop`, { method: "POST" });
-  return res.json();
-}
-async function getDetectionStatus() {
-  const res = await fetch(`${BASE_URL}/api/detect/status`);
-  return res.json();
 }
 
 export default function PlaySession() {
@@ -72,6 +53,7 @@ export default function PlaySession() {
   const [accuracy, setAccuracy] = useState(100);
   const [detecting, setDetecting] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
+  const isCalibratingRef = useRef(false);
   const [calibrationDone, setCalibrationDone] = useState(false);
   const [showCalibrationComplete, setShowCalibrationComplete] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
@@ -80,11 +62,14 @@ export default function PlaySession() {
   const calibrationDoneRef = useRef(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
+  const correctCountRef = useRef(0);
+  const incorrectCountRef = useRef(0);
 
   // ✅ REFS TO PREVENT CLOSURE ISSUES - Always have latest values
   const wordsRef = useRef<string[]>([]);
   const currentWordIndexRef = useRef(0);
   const userInputRef = useRef("");
+  const aiPointerRef = useRef(0); // ✅ Independent AI pointer - tracks absolute index of NEXT character to grade
 
   // ============================================================
   // Task 1: Calibration Timeout & Validation States
@@ -94,16 +79,20 @@ export default function PlaySession() {
   const calibrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============================================================
-  // Task 2: 10-Finger Monitoring States
+  // Task 2: 10-Finger Monitoring States (Dual-Hand Detection)
   // ============================================================
   const [fingertipCount, setFingertipCount] = useState(0);
   const fingertipCountRef = useRef(0); // ✅ Ref to avoid closure trap
+  const [leftFingersCount, setLeftFingersCount] = useState(0);
+  const leftFingersCountRef = useRef(0);
+  const [rightFingersCount, setRightFingersCount] = useState(0);
+  const rightFingersCountRef = useRef(0);
   const [fingerError, setFingerError] = useState(false);
+  const fingerErrorRef = useRef(false); // ✅ Ref to avoid closure trap
   const fingerCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fingerBufferTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFingerCheckRef = useRef<number>(Date.now());
   const lastGoodStateRef = useRef<number>(Date.now()); // ✅ Track when we last had >= 9 fingers
-  const [typingBlocked, setTypingBlocked] = useState(false);
   const [lastKey, setLastKey] = useState<string | null>(null);
   const firstKeyTimeRef = useRef<number | null>(null);
   const endTimeRef = useRef<number | null>(null);
@@ -111,38 +100,21 @@ export default function PlaySession() {
 
   // ✅ Track last detection signature to prevent duplicate counting
   const lastEventRef = useRef<string | null>(null);
+  const totalPausedTimeRef = useRef<number>(0);
+  const pauseStartTimeRef = useRef<number | null>(null);
 
   // ✅ Additional metric states (Phase 1)
   const [fingerAccuracy, setFingerAccuracy] = useState(0);
   const [timingVariance, setTimingVariance] = useState(0);
 
   // 🧠 Track individual key errors
-  const [errorHistory, setErrorHistory] = useState<
-    { expected: string; pressed: string; tip: string }[]
-  >([]);
+  const [errorHistory, setErrorHistory] = useState<ErrorHistoryEntry[]>([]);
+  const errorHistoryRef = useRef<ErrorHistoryEntry[]>([]); // ✅ Ref to avoid stale closure
 
-  // ============================================================
-  // SIMPLIFIED KEY COLORING: GREEN (fully correct) or RED (any error)
-  // ============================================================
-  // This function determines the visual feedback color for key presses.
-  // - GREEN: Key press is FULLY CORRECT (right key + right finger)
-  // - RED: Key press has ANY error (wrong key OR wrong finger)
-  //
-  // This simplified binary feedback makes it easier for students to
-  // understand: green means perfect, red means something is wrong.
-  // ============================================================
-  const getKeyColor = (pressedKey: string, expectedKey: string, mlLabel: string) => {
-    const correctKey = pressedKey === expectedKey;
-    const correctFinger = mlLabel === "Correct";
+  // 🎬 Track complete session history for replay feature
+  const [sessionHistory, setSessionHistory] = useState<SessionHistoryEntry[]>([]);
+  const sessionHistoryRef = useRef<SessionHistoryEntry[]>([]);
 
-    // Only green if BOTH key and finger are correct
-    // Otherwise red for any kind of mistake
-    if (correctKey && correctFinger) {
-      return "green";  // Fully correct
-    } else {
-      return "red";    // Any error (wrong key OR wrong finger)
-    }
-  }
 
   // ============================================================
   // Timer State (30-second countdown)
@@ -152,6 +124,7 @@ export default function PlaySession() {
   const timerStartedRef = useRef(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sessionEnded, setSessionEnded] = useState(false);
+  const [finalAnalysis, setFinalAnalysis] = useState<any>(null); // Stores analysis for SessionComplete
 
   // ============================================================
   // Error Queue State (FIFO, max 5)
@@ -162,7 +135,7 @@ export default function PlaySession() {
   // so we never emit two errors (wrong key + wrong finger) for the same press
   const lastErroredKeyRef = useRef<string | null>(null);
 
-  const pushError = useCallback((type: ErrorQueueEntry["type"], description: string, eventSignature?: string) => {
+  const pushError = useCallback((type: ErrorQueueEntry["type"], description: string, pressedKey: string, eventSignature?: string) => {
     // Use event signature (includes position + key) to prevent exact duplicates
     // This allows different errors for the same key at different positions
     if (eventSignature) {
@@ -171,10 +144,25 @@ export default function PlaySession() {
     }
     const id = ++errorIdRef.current;
     setErrorQueue((prev) => {
-      const next = [...prev, { id, type, description }];
+      const next = [...prev, { id, type, description, pressedKey }];
       return next.length > 5 ? next.slice(next.length - 5) : next;
     });
   }, []);
+
+  // ============================================================
+  // Sync refs with state to avoid stale closures in SSE handler
+  // ============================================================
+  useEffect(() => {
+    isCalibratingRef.current = isCalibrating;
+  }, [isCalibrating]);
+
+  useEffect(() => {
+    fingerErrorRef.current = fingerError;
+  }, [fingerError]);
+
+  useEffect(() => {
+    sessionHistoryRef.current = sessionHistory;
+  }, [sessionHistory]);
 
   // ============================================================
   // Timer: start on first valid keypress, countdown to zero
@@ -193,14 +181,55 @@ export default function PlaySession() {
           }
           return prev - 1;
         });
+
+        // Update Gross WPM every second
+        if (firstKeyTimeRef.current !== null) {
+          const now =
+            endTimeRef.current !== null
+              ? endTimeRef.current
+              : (pauseStartTimeRef.current ?? Date.now());
+
+          const minutesElapsed =
+            (now - firstKeyTimeRef.current - totalPausedTimeRef.current) / 1000 / 60;
+
+          if (minutesElapsed > 0) {
+            const grossWpm = Math.round((correctCountRef.current + incorrectCountRef.current) / (5 * minutesElapsed));
+            setWpm(grossWpm);
+          }
+        }
       }, 1000);
     }
   }, [lastKey]);
 
-  // Timer-driven session termination
+  // Timer-driven session termination - strict cleanup for privacy/security
   useEffect(() => {
-    if (sessionEnded && detecting) {
-      handleStopDetection();
+    if (sessionEnded) {
+      // Add skipped characters to session history
+      const fullText = wordsRef.current.join('').toUpperCase();
+      const currentPosition = aiPointerRef.current;
+
+      if (currentPosition < fullText.length) {
+        const skippedEntries: SessionHistoryEntry[] = [];
+        for (let i = currentPosition; i < fullText.length; i++) {
+          skippedEntries.push({
+            char: '',
+            expected: fullText[i],
+            status: 'skipped',
+            tip: 'Did not finish in time'
+          });
+        }
+
+        if (skippedEntries.length > 0) {
+          setSessionHistory(prev => [...prev, ...skippedEntries]);
+        }
+      }
+
+      // Immediate cleanup: stop all frame capture and detection
+      setFrame(null);
+      setDetecting(false);
+      if (detecting) {
+        handleStopDetection();
+      }
     }
   }, [sessionEnded]);
 
@@ -212,10 +241,25 @@ export default function PlaySession() {
   }, []);
 
   // ============================================================
+  // Auto-dismiss fingerError when session ends or timer expires
+  // ============================================================
+  useEffect(() => {
+    if (sessionEnded || timeLeft === 0) {
+      setFingerError(false);
+      fingerErrorRef.current = false;
+    }
+  }, [sessionEnded, timeLeft]);
+
+  // ============================================================
   // Task 3: Keyboard Shortcuts (Tab = Recalibrate, Enter = Finish)
   // ============================================================
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Priority 0: Block all shortcuts on results screen
+      if (sessionEnded || (currentWordIndex >= words.length && words.length > 0)) {
+        return;
+      }
+
       // Priority 1: If calibration error popup is active, BLOCK all shortcuts
       if (calibrationError) {
         return;
@@ -235,41 +279,8 @@ export default function PlaySession() {
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [calibrationError, fingerError]); // Re-bind when popup states change
+  }, [calibrationError, fingerError, sessionEnded, currentWordIndex, words.length]); // Re-bind when popup states change
 
-  // 🧠 Suggest which finger should be used
-  const getCorrectionTip = (char: string) => {
-    const map: Record<string, string> = {
-      A: "Use your left pinky",
-      S: "Use your left ring",
-      D: "Use your left middle",
-      F: "Use your left index",
-      G: "Use your left index",
-      H: "Use your right index",
-      J: "Use your right index",
-      K: "Use your right middle",
-      L: "Use your right ring",
-      ";": "Use your right pinky",
-      Q: "Use your left pinky",
-      W: "Use your left ring",
-      E: "Use your left middle",
-      R: "Use your left index",
-      T: "Use your left index",
-      Y: "Use your right index",
-      U: "Use your right index",
-      I: "Use your right middle",
-      O: "Use your right ring",
-      P: "Use your right pinky",
-      Z: "Use your left pinky",
-      X: "Use your left ring",
-      C: "Use your left middle",
-      V: "Use your left index",
-      B: "Use your left index",
-      N: "Use your right index",
-      M: "Use your right index",
-    };
-    return map[char] ? `${map[char]} for "${char}"` : "Check your finger placement";
-  };
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -304,16 +315,23 @@ export default function PlaySession() {
   useEffect(() => {
     const fetchTypingData = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/typing/level/${level}`);
+        const res = await fetch(`${BASE_URL}/api/typing/level/${level}`);
         const data = await res.json();
         if (data && data.data) {
           const text = data.data.join(" ");
           const wordArray = text.split(" ");
           setWords(wordArray);
+
+          // Initialize AI pointer to start of text
+          aiPointerRef.current = 0;
+
           await fetch(`${BASE_URL}/api/detect/set-expected`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ words: wordArray }),
+            body: JSON.stringify({
+              words: wordArray,
+              startIndex: 0
+            }),
           });
         }
       } catch (error) {
@@ -369,7 +387,6 @@ export default function PlaySession() {
 
       // Immediately clear error and unblock typing when hands are back
       setFingerError(false);
-      setTypingBlocked(false);
 
       // Clear any pending buffer timeout
       if (fingerBufferTimeoutRef.current) {
@@ -378,26 +395,22 @@ export default function PlaySession() {
       }
       lastFingerCheckRef.current = now;
     }
-    // If less than 9 fingers detected, apply hysteresis buffer
+    // If less than 9 fingers detected, apply strict 1-second buffer
     else if (fingertipCount < 9) {
       // Clear any existing timeout
       if (fingerBufferTimeoutRef.current) {
         clearTimeout(fingerBufferTimeoutRef.current);
       }
 
-      // ✅ HYSTERESIS: Add grace period if we were recently in good state
-      // If we had 9+ fingers within the last 2 seconds, use longer buffer (2.5s)
-      // This prevents transient AI drops from triggering the popup
-      const timeSinceGoodState = now - lastGoodStateRef.current;
-      const wasRecentlyGood = timeSinceGoodState < 2000; // Within 2 seconds
-      const bufferDuration = wasRecentlyGood ? 2500 : 1500; // 2.5s if recently good, 1.5s otherwise
+      // ✅ STRICT ENFORCEMENT: Fixed 1000ms (1 second) buffer
+      // Popup appears exactly 1 second after fingers are removed
+      const bufferDuration = 1000;
 
       fingerBufferTimeoutRef.current = setTimeout(() => {
         // ✅ FIX CLOSURE TRAP: Use Ref instead of state
         // This ensures we check the LATEST count, not the captured value
         if (fingertipCountRef.current < 9) {
           setFingerError(true);
-          setTypingBlocked(true);
         }
       }, bufferDuration);
     }
@@ -409,9 +422,14 @@ export default function PlaySession() {
     };
   }, [fingertipCount, calibrationDone, detecting, sessionEnded]);
 
-  // SSE handled in VideoFeed component
+  // SSE connection for real-time detection events
   useEffect(() => {
     if (!detecting) return;
+
+    // Close SSE if session has ended (privacy/security)
+    if (sessionEnded || isFinished) {
+      return;
+    }
 
     const source = new EventSource(`${BASE_URL}/api/detect/stream`);
 
@@ -428,6 +446,12 @@ export default function PlaySession() {
             break;
           case "calibration_done":
             if (!calibrationDoneRef.current) {
+              // ✅ ACCUMULATE PAUSE TIME
+              if (firstKeyTimeRef.current && pauseStartTimeRef.current) {
+                totalPausedTimeRef.current += (Date.now() - pauseStartTimeRef.current);
+              }
+              pauseStartTimeRef.current = null;
+
               // Clear calibration timeout
               if (calibrationTimeoutRef.current) {
                 clearTimeout(calibrationTimeoutRef.current);
@@ -455,7 +479,6 @@ export default function PlaySession() {
               fingerCheckTimeoutRef.current = setTimeout(() => {
                 if (fingertipCountRef.current < 9) {
                   setFingerError(true);
-                  setTypingBlocked(true);
                 }
               }, 5000);
             }
@@ -474,6 +497,15 @@ export default function PlaySession() {
             setFrame(data.frame || null);
             if (typeof data.fingertip_count === 'number') {
               setFingertipCount(data.fingertip_count);
+              fingertipCountRef.current = data.fingertip_count;
+            }
+            if (typeof data.left_fingers_count === 'number') {
+              setLeftFingersCount(data.left_fingers_count);
+              leftFingersCountRef.current = data.left_fingers_count;
+            }
+            if (typeof data.right_fingers_count === 'number') {
+              setRightFingersCount(data.right_fingers_count);
+              rightFingersCountRef.current = data.right_fingers_count;
             }
             break;
           case "detection":
@@ -488,6 +520,15 @@ export default function PlaySession() {
               // Update fingertip count from detection events
               if (typeof data.fingertip_count === 'number') {
                 setFingertipCount(data.fingertip_count);
+                fingertipCountRef.current = data.fingertip_count;
+              }
+              if (typeof data.left_fingers_count === 'number') {
+                setLeftFingersCount(data.left_fingers_count);
+                leftFingersCountRef.current = data.left_fingers_count;
+              }
+              if (typeof data.right_fingers_count === 'number') {
+                setRightFingersCount(data.right_fingers_count);
+                rightFingersCountRef.current = data.right_fingers_count;
               }
 
               // Validate detection payload
@@ -497,8 +538,11 @@ export default function PlaySession() {
               // ✅ ALPHABET ONLY (A-Z) - ignore space and all other keys
               if (!/^[A-Z]$/.test(key)) return;
 
-              // Block typing if finger error popup is active
-              if (typingBlocked) return;
+              // Block all input during calibration OR finger error
+              // Recalibration = Full Pause (timer stops, no metrics)
+              // Finger Error = Input Block Only (timer runs, WPM penalty)
+              // Use refs to avoid stale closure issues in SSE handler
+              if (isCalibratingRef.current || fingerErrorRef.current) return;
 
               const expectedKey = data.expected_key
                 ? String(data.expected_key).toUpperCase()
@@ -527,11 +571,8 @@ export default function PlaySession() {
               // ────────────────────────────────────────────────────────────
               // PHASE 2: CALCULATE POSITION & VALIDATE
               // ────────────────────────────────────────────────────────────
-              let globalCursorPos = 0;
-              for (let i = 0; i < currentWordIdx; i++) {
-                globalCursorPos += (currentWords[i]?.length || 0);
-              }
-              globalCursorPos += currentInput.length;
+              // Use independent AI pointer - always points to the NEXT character to grade
+              const globalCursorPos = aiPointerRef.current;
 
               // Duplicate prevention
               const signature = JSON.stringify({
@@ -548,30 +589,45 @@ export default function PlaySession() {
               const expectedChar = fullText[globalCursorPos];
               if (!expectedChar) return;
 
-              const expectedWord = currentWords[currentWordIdx] || "";
-              const nextCharInWord = expectedWord[currentInput.length];
-              if (!nextCharInWord) return;
-
-              // Calculate what the new state will be
-              const newInput = currentInput + nextCharInWord;
+              // Calculate new state after this keystroke
               const newGlobalCursorPos = globalCursorPos + 1;
-              const isWordComplete = newInput.length >= expectedWord.length;
               const isSessionComplete = newGlobalCursorPos >= fullText.length;
+
+              // Determine current word boundaries for word completion logic
+              const expectedWord = currentWords[currentWordIdx] || "";
+              const newInput = currentInput + expectedChar;
+              const isWordComplete = newInput.length >= expectedWord.length;
 
               // ────────────────────────────────────────────────────────────
               // PHASE 3: UPDATE METRICS FIRST (CRITICAL FOR UI RESPONSIVENESS)
               // ────────────────────────────────────────────────────────────
               const errorEventSignature = `${signature}-error`;
 
+              // Extract hand and finger data for tracking
+              const detectedHand = data.hand ? String(data.hand) : undefined;
+              const detectedFinger = data.finger ? String(data.finger) : undefined;
+
               if (isCorrectFinal) {
                 setCorrectCount((prev) => {
                   const next = prev + 1;
+                  correctCountRef.current = next;
                   console.log(`✅ Correct: ${prev} → ${next}`);
                   return next;
                 });
+
+                // Track correct keystroke in session history
+                setSessionHistory((prev) => [...prev, {
+                  char: key,
+                  expected: expectedKey,
+                  status: "correct",
+                  tip: "",
+                  hand: detectedHand,
+                  finger: detectedFinger
+                }]);
               } else {
                 setIncorrectCount((prev) => {
                   const next = prev + 1;
+                  incorrectCountRef.current = next;
                   console.log(`❌ Incorrect: ${prev} → ${next}`);
                   return next;
                 });
@@ -584,23 +640,62 @@ export default function PlaySession() {
                   pushError(
                     "incorrect_key",
                     `Wrong Key: Pressed "${key}" instead of "${expectedKey}"`,
+                    key,
                     errorEventSignature
                   );
-                  setErrorHistory((prev) => [...prev, {
+                  setErrorHistory((prev) => {
+                    const next = [...prev, {
+                      expected: expectedKey,
+                      pressed: key,
+                      tip: correctionTip,
+                      hand: detectedHand,
+                      finger: detectedFinger
+                    }];
+                    errorHistoryRef.current = next;
+                    return next;
+                  });
+
+                  // Track wrong key in session history
+                  setSessionHistory((prev) => [...prev, {
+                    char: key,
                     expected: expectedKey,
-                    pressed: key,
-                    tip: correctionTip
+                    status: "wrong_key",
+                    tip: correctionTip,
+                    hand: detectedHand,
+                    finger: detectedFinger
                   }]);
                 } else {
+                  // Create specific finger error message
+                  const fingerErrorMsg = detectedHand && detectedFinger
+                    ? `You pressed '${key}' with ${detectedHand} ${detectedFinger} finger.`
+                    : `Wrong Finger: Used incorrect finger for "${key}"`;
+
                   pushError(
                     "incorrect_finger",
-                    `Wrong Finger: Used incorrect finger for "${key}"`,
+                    fingerErrorMsg,
+                    key,
                     errorEventSignature
                   );
-                  setErrorHistory((prev) => [...prev, {
+                  setErrorHistory((prev) => {
+                    const next = [...prev, {
+                      expected: expectedKey,
+                      pressed: key,
+                      tip: correctionTip,
+                      hand: detectedHand,
+                      finger: detectedFinger
+                    }];
+                    errorHistoryRef.current = next;
+                    return next;
+                  });
+
+                  // Track wrong finger in session history
+                  setSessionHistory((prev) => [...prev, {
+                    char: key,
                     expected: expectedKey,
-                    pressed: key,
-                    tip: correctionTip
+                    status: "wrong_finger",
+                    tip: correctionTip,
+                    hand: detectedHand,
+                    finger: detectedFinger
                   }]);
                 }
               }
@@ -639,6 +734,9 @@ export default function PlaySession() {
 
               // Update word index with SYNCHRONOUS ref update
               if (isWordComplete) {
+                // Record completed word for session history
+                setTypedWords((prev) => [...prev, newInput]);
+
                 setCurrentWordIndex((prev) => {
                   const next = prev + 1;
                   currentWordIndexRef.current = next;
@@ -649,17 +747,39 @@ export default function PlaySession() {
               // Update last key
               setLastKey(key);
 
+              // Advance AI pointer to next character
+              aiPointerRef.current += 1;
+
               // ────────────────────────────────────────────────────────────
               // PHASE 6: SESSION COMPLETION (IF APPLICABLE)
               // ────────────────────────────────────────────────────────────
               if (isSessionComplete) {
                 console.log("🏁 Last character typed - ending session immediately");
-                setSessionEnded(true);
+
+                // Capture exact end time FIRST for high-precision calculation
+                endTimeRef.current = Date.now();
+
+                // Calculate final Gross WPM using precise timing
+                if (firstKeyTimeRef.current !== null) {
+                  const finalMinutesElapsed =
+                    (endTimeRef.current - firstKeyTimeRef.current - totalPausedTimeRef.current) / 1000 / 60;
+
+                  if (finalMinutesElapsed > 0) {
+                    const finalGrossWpm = Math.round(
+                      (correctCountRef.current + incorrectCountRef.current) / (5 * finalMinutesElapsed)
+                    );
+                    setWpm(finalGrossWpm);
+                    console.log(`📊 Final Gross WPM: ${finalGrossWpm} (${finalMinutesElapsed.toFixed(2)} minutes)`);
+                  }
+                }
+
+                // Stop timer interval
                 if (timerIntervalRef.current) {
                   clearInterval(timerIntervalRef.current);
                   timerIntervalRef.current = null;
                 }
-                endTimeRef.current = Date.now();
+
+                setSessionEnded(true);
               }
             }
             break;
@@ -676,20 +796,9 @@ export default function PlaySession() {
   // Typing Handlers
   // ============================================================
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value.endsWith(" ")) {
-      const typedWord = value.trim();
-      setTypedWords((prev) => {
-        const updated = [...prev];
-        updated[currentWordIndex] = typedWord;
-        return updated;
-      });
-      setCurrentWordIndex((prev) => prev + 1);
-      setUserInput("");
-      setCharFeedback({});
-      return;
-    }
-    setUserInput(value);
+    // Only update visual userInput - SSE handler manages word advancement
+    if (isCalibrating || fingerError) return;
+    setUserInput(e.target.value);
   };
 
   // ============================================================
@@ -707,6 +816,9 @@ export default function PlaySession() {
   // SINGLE SOURCE OF TRUTH: Backend validation determines key colors.
   // ============================================================
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 🛑 PAUSE INPUT: Block typing if calibrating or hand error
+    if (isCalibrating || fingerError) return;
+
     // Block backspace, delete, and all non-alphabet keys
     if (e.key === "Backspace" || e.key === "Delete") {
       e.preventDefault();
@@ -771,37 +883,15 @@ export default function PlaySession() {
     // --------------------------
     // 3. ACCURACY (finger-based)
     // --------------------------
-    const totalFingerEvents = correctCount + incorrectCount;
+    const totalFingerEvents = correctCountRef.current + incorrectCountRef.current;
 
     const accuracyVal =
       totalFingerEvents > 0
-        ? Math.round((correctCount / totalFingerEvents) * 100)
+        ? Math.round((correctCountRef.current / totalFingerEvents) * 100)
         : 100;
 
     setAccuracy(accuracyVal);
-
-    // --------------------------
-    // 4. REAL-TIME WPM UPDATE
-    // --------------------------
-    const interval = setInterval(() => {
-      if (firstKeyTimeRef.current !== null) {
-        const now =
-          endTimeRef.current !== null
-            ? endTimeRef.current
-            : Date.now();
-
-        const minutesElapsed =
-          (now - firstKeyTimeRef.current) / 1000 / 60;
-
-        if (minutesElapsed > 0) {
-          const wpmVal = Math.round(completedExpected / minutesElapsed);
-          setWpm(wpmVal);
-        }
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [lastKey, completedExpected, words, correctCount, incorrectCount]);
+  }, [lastKey, completedExpected, words]);
 
   // ============================================================
   // Detection Start/Stop
@@ -821,7 +911,6 @@ export default function PlaySession() {
       setCalibrationDone(false);
       setShowCalibrationComplete(false);
       calibrationDoneRef.current = false;
-      setTypingBlocked(false);
 
       // Clear any existing timeouts
       if (calibrationTimeoutRef.current) {
@@ -833,6 +922,29 @@ export default function PlaySession() {
       if (fingerBufferTimeoutRef.current) {
         clearTimeout(fingerBufferTimeoutRef.current);
       }
+
+      // Calculate current global cursor position and send to backend
+      const currentWords = wordsRef.current;
+      const currentWordIdx = currentWordIndexRef.current;
+      const currentInput = userInputRef.current;
+      let globalCursorPos = 0;
+      for (let i = 0; i < currentWordIdx; i++) {
+        globalCursorPos += (currentWords[i]?.length || 0);
+      }
+      globalCursorPos += currentInput.length;
+
+      // Reset AI pointer to current position (prevents skipping characters after recalibration)
+      aiPointerRef.current = globalCursorPos;
+
+      // Synchronize expected words with backend, including current position
+      await fetch(`${BASE_URL}/api/detect/set-expected`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          words: currentWords,
+          startIndex: globalCursorPos
+        }),
+      });
 
       // Start 15-second calibration timeout
       calibrationStartTimeRef.current = Date.now();
@@ -856,19 +968,38 @@ export default function PlaySession() {
   // ============================================================
   const handleRecalibrate = async () => {
     try {
-      // ✅ IMMEDIATE VISUAL WIPE: Clear frame/progress at the very start
-      // This gives instant visual feedback that recalibration has started
-      setFrame(null);
-      setCalibrationProgress({ detected: 0, required: 26 }); // ✅ 26-key model
+      // 🛑 STOP TIMER & RECORD PAUSE START
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      timerStartedRef.current = false;
+      pauseStartTimeRef.current = Date.now();
+      setLastKey(null);
+      setFingertipCount(0);
+      fingertipCountRef.current = 0;
 
-      // Stop existing detection
+      // Instant UI feedback - wipe all calibration data immediately
+      setFrame(null);
+      setCalibrationProgress({ detected: 0, required: 26 });
+      setCalibrationDone(false);
+      setShowCalibrationComplete(false);
+      setIsCalibrating(true);
+      calibrationDoneRef.current = false;
+
+      // Set detecting to false to prevent ghost detections
+      setDetecting(false);
+
+      // Force kill detection
       if (detecting) {
         await stopDetection();
-        setDetecting(false);
       }
 
-      // Small delay to ensure clean shutdown
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wipe intermediate state
+      window.typedBuffer = "";
+
+      // Cool-down period - mandatory 1000ms delay for clean camera release
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Restart detection with fresh calibration
       await handleStartDetection();
@@ -925,59 +1056,152 @@ export default function PlaySession() {
       await handleStopDetection();
     }
 
-    const sessionDuration = Math.round((Date.now() - startTime) / 1000);
+    // Navigate back to dashboard
+    navigate("/student/play");
+  };
+
+  // ============================================================
+  // Auto-Calculate and Save Metrics When Session Ends
+  // ============================================================
+  const calculateAndSaveMetrics = async () => {
+    // ═══════════════════════════════════════════════════════════
+    // TIMER FIX: Use firstKeyTimeRef (actual typing start) instead of startTime (page load)
+    // ═══════════════════════════════════════════════════════════
+    if (!firstKeyTimeRef.current) {
+      console.warn("⚠️ No typing detected - cannot calculate metrics");
+      return null;
+    }
+
+    const endTime = endTimeRef.current || Date.now();
+    const actualTypingDuration = endTime - firstKeyTimeRef.current - totalPausedTimeRef.current;
+    const sessionDuration = Math.round(actualTypingDuration / 1000);
+
+    // ═══════════════════════════════════════════════════════════
+    // USE REFS TO AVOID STALE STATE - Get final counts from refs
+    // ═══════════════════════════════════════════════════════════
+    const finalCorrectCount = correctCountRef.current;
+    const finalIncorrectCount = incorrectCountRef.current;
+    const totalKeystrokes = finalCorrectCount + finalIncorrectCount;
+
+    // ═══════════════════════════════════════════════════════════
+    // SINGLE SOURCE OF TRUTH: Shared Display Brain Analysis
+    // ═══════════════════════════════════════════════════════════
+
+    // 1. Calculate Gross WPM from actual typing timer (excludes calibration)
+    const minutesElapsed = sessionDuration / 60;
+    const grossWpm = minutesElapsed > 0
+      ? (finalCorrectCount + finalIncorrectCount) / (5 * minutesElapsed)
+      : 0;
+
+    // 2. Use the tracked error history ref for high-precision analysis
+    const errorHistory = errorHistoryRef.current;
+
+    // 3. Call the EXACT SAME analyzeSession function that SessionComplete.tsx uses
+    const analysis = analyzeSession(
+      grossWpm,
+      totalKeystrokes > 0 ? (finalCorrectCount / totalKeystrokes) * 100 : 100,
+      finalCorrectCount,
+      finalIncorrectCount,
+      errorHistory
+    );
+
+    // 4. Format metrics with 2-decimal precision for database
+    const dbMetrics = formatMetricsForDatabase(analysis, grossWpm);
+
+    // 5. Calculate detailed error breakdown from session history (using ref for accuracy)
+    const wrongKeysCount = sessionHistoryRef.current.filter(entry => entry.status === "wrong_key").length;
+    const wrongFingersCount = sessionHistoryRef.current.filter(entry => entry.status === "wrong_finger").length;
+    const skippedCount = sessionHistoryRef.current.filter(entry => entry.status === "skipped").length;
 
     const report: SessionReport = {
-      wpm,
-      accuracy,
-      correct_keystrokes: correctCount,
-      incorrect_keystrokes: incorrectCount,
+      wpm: dbMetrics.wpm,
+      accuracy: dbMetrics.accuracy,
+      correct_keystrokes: finalCorrectCount,
+      incorrect_keystrokes: finalIncorrectCount,
       fingerAccuracy,
       timingVariance,
       session_duration_sec: sessionDuration,
     };
 
     console.log("📊 Session Report:", report);
+    console.log("📊 Display Brain Analysis (100% Unified):", {
+      correctCount: finalCorrectCount,
+      incorrectCount: finalIncorrectCount,
+      wrongKeysCount,
+      wrongFingersCount,
+      skippedCount,
+      ...dbMetrics,
+      letterGrade: analysis.letterGrade,
+      performanceSummary: analysis.performanceSummary,
+    });
 
+    // ═══════════════════════════════════════════════════════════
+    // AUTO-SAVE: Immediately save to database when session ends
+    // ═══════════════════════════════════════════════════════════
     if (sessionType === "evaluated") {
-      const grade =
-        wpm >= 40 && accuracy >= 95
-          ? "A"
-          : wpm >= 30 && accuracy >= 85
-            ? "B+"
-            : wpm >= 20 && accuracy >= 75
-              ? "B"
-              : "C";
-
       try {
-        await fetch("http://localhost:5000/api/results", {
+        const userId = localStorage.getItem("userName") || "guest";
+        await fetch(`${BASE_URL}/api/results`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ level, wpm, accuracy, grade, sessionType }),
+          body: JSON.stringify({
+            userId,
+            level,
+            wpm: dbMetrics.wpm,
+            accuracy: dbMetrics.accuracy,
+            grade: dbMetrics.grade,
+            sessionType,
+            correctCount: finalCorrectCount,
+            wrongKeysCount,
+            wrongFingersCount,
+            skippedCount,
+            compositeScore: dbMetrics.compositeScore,
+            netWpm: dbMetrics.netWpm,
+            errorRate: dbMetrics.errorRate,
+          }),
         });
-        console.log("✅ Session result saved to MongoDB");
+        console.log("✅ Auto-saved to MongoDB immediately on session end");
       } catch (error) {
-        console.error("❌ Failed to save result:", error);
+        console.error("❌ Failed to auto-save result:", error);
       }
     }
-    navigate("/student/play");
+
+    // Return analysis object for SessionComplete to display
+    return { analysis, dbMetrics };
   };
 
   const isFinished = (currentWordIndex >= words.length && words.length > 0) || sessionEnded;
 
   // Stop detection AND timer when the typing session ends (either path)
   useEffect(() => {
-    if (isFinished) {
-      // Freeze the countdown — clear interval so no further ticks occur
+    if (isFinished && !finalAnalysis) {
+      // Strict session-end cleanup for privacy/security
+      setFrame(null);
+      setDetecting(false);
+
+      // Freeze the countdown
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
+
+      // Stop Python camera process
       if (detecting) {
         handleStopDetection();
       }
+
+      // ═══════════════════════════════════════════════════════════
+      // AUTO-SAVE: Calculate metrics and save to database immediately
+      // ═══════════════════════════════════════════════════════════
+      (async () => {
+        const result = await calculateAndSaveMetrics();
+        if (result) {
+          setFinalAnalysis(result);
+          console.log("🎯 Final analysis calculated and auto-saved:", result);
+        }
+      })();
     }
-  }, [isFinished]);
+  }, [isFinished, finalAnalysis]);
 
   // ============================================================
   // UI — Compact Boxed Arena Layout
@@ -988,7 +1212,6 @@ export default function PlaySession() {
         isCalibrating={isCalibrating}
         showCalibrationComplete={showCalibrationComplete}
         calibrationProgress={calibrationProgress}
-        frame={frame}
       />
 
       <DetectionErrorOverlay
@@ -1028,37 +1251,15 @@ export default function PlaySession() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
-          FINGER ERROR POPUP (Task 2)
+          FINGER ERROR POPUP (Dual-Hand Detection)
           Allows Tab/Enter shortcuts when active
-          Auto-dismisses when 9+ fingers detected (lenient for thumbs)
+          Auto-dismisses when session ends or timer expires
           ═══════════════════════════════════════════════════════ */}
-      {fingerError && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card border-2 border-yellow-500 rounded-lg p-6 max-w-md shadow-2xl">
-            <h2 className="text-xl font-pixel text-yellow-500 mb-4">
-              ✋ Hand Position Required
-            </h2>
-            <p className="text-sm mb-4 text-foreground">
-              {calibrationDone && fingertipCount < 9
-                ? "Improper resting position. Rest all fingers on home row keys (based on proper touch typing)."
-                : "Rest your hands properly on the home row keys."}
-            </p>
-            <div className="text-center mb-4">
-              <span className="text-2xl font-bold text-yellow-500">
-                {fingertipCount}/10 fingers detected
-              </span>
-              <p className="text-xs text-muted-foreground mt-1">
-                (9+ fingers required - lenient for thumbs)
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Typing is blocked until hands are properly positioned.
-              <br />
-              You can still use Tab (Recalibrate) or Enter (Finish Session).
-            </p>
-          </div>
-        </div>
-      )}
+      <FingerErrorModal
+        show={fingerError}
+        leftFingersCount={leftFingersCount}
+        rightFingersCount={rightFingersCount}
+      />
 
       {/* ═══════════════════════════════════════════════════════
           OUTER BOXED CONTAINER — single enclosed arena
@@ -1146,13 +1347,15 @@ export default function PlaySession() {
             ) : (
               <SessionComplete
                 sessionEnded={sessionEnded}
-                wpm={wpm}
-                accuracy={accuracy}
-                correctCount={correctCount}
-                incorrectCount={incorrectCount}
+                wpm={finalAnalysis?.dbMetrics.wpm || wpm}
+                accuracy={finalAnalysis?.dbMetrics.accuracy || accuracy}
+                correctCount={correctCountRef.current}
+                incorrectCount={incorrectCountRef.current}
                 typedWordsLength={typedWords.length}
                 errorHistory={errorHistory}
+                sessionHistory={sessionHistoryRef.current}
                 onFinish={handleFinish}
+                finalAnalysis={finalAnalysis}
               />
             )}
           </section>

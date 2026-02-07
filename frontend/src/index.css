@@ -151,4 +151,39 @@
     font-family: "Press Start 2P", cursive;
     text-rendering: optimizeLegibility;
   }
+
+  /* Pixel-style scrollbars */
+  .pixel-scrollbar::-webkit-scrollbar {
+    height: 12px;
+  }
+  .pixel-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .pixel-scrollbar::-webkit-scrollbar-thumb {
+    background: #eab308;
+    border-radius: 0;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+  }
+  .pixel-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #fbbf24;
+  }
+
+  .pixel-scrollbar-vertical::-webkit-scrollbar {
+    width: 12px;
+  }
+  .pixel-scrollbar-vertical::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .pixel-scrollbar-vertical::-webkit-scrollbar-thumb {
+    background: #eab308;
+    border-radius: 0;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+  }
+  .pixel-scrollbar-vertical::-webkit-scrollbar-thumb:hover {
+    background: #fbbf24;
+  }
 }

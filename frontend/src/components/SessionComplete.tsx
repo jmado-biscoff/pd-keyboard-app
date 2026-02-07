@@ -1,11 +1,8 @@
+import { useState, useEffect } from "react";
 import { PixelCard } from "./PixelCard";
 import { PixelButton } from "./PixelButton";
-
-interface ErrorHistoryEntry {
-  expected: string;
-  pressed: string;
-  tip: string;
-}
+import { analyzeSession } from "@/utils/displayBrain";
+import type { ErrorHistoryEntry, SessionHistoryEntry, SessionAnalysis } from "@/types/typing";
 
 interface SessionCompleteProps {
   sessionEnded: boolean;
@@ -15,93 +12,10 @@ interface SessionCompleteProps {
   incorrectCount: number;
   typedWordsLength: number;
   errorHistory: ErrorHistoryEntry[];
+  sessionHistory: SessionHistoryEntry[];
   onFinish: () => void;
+  finalAnalysis?: { analysis: SessionAnalysis; dbMetrics: any } | null;
 }
-
-// Analyze error patterns and generate mastery tip
-interface SessionAnalysis {
-  performanceSummary: string;
-  masteryTip: string | null;
-  isPerfect: boolean;
-  totalErrors: number;
-  mostFrequentKey: string | null;
-  mostFrequentCount: number;
-}
-
-const analyzeSession = (
-  wpm: number,
-  accuracy: number,
-  correct: number,
-  incorrect: number,
-  errorHistory: ErrorHistoryEntry[]
-): SessionAnalysis => {
-  const total = correct + incorrect;
-  const errorRate = total > 0 ? (incorrect / total) * 100 : 0;
-  const isPerfect = errorHistory.length === 0 && accuracy === 100;
-
-  // 1. Performance Summary
-  let performanceSummary = "";
-  if (accuracy >= 95 && wpm >= 30) {
-    performanceSummary = "🏆 Excellent! High accuracy and good speed. You're mastering touch typing!";
-  } else if (accuracy >= 85) {
-    performanceSummary = "✅ Good job! You're typing accurately. Keep practicing to build speed.";
-  } else if (accuracy >= 70) {
-    performanceSummary = "⚠️ Focus on accuracy. Slow down and ensure each keystroke is correct.";
-  } else {
-    performanceSummary = "💡 Accuracy needs improvement. Review finger positions on the home row.";
-  }
-
-  // 2. Analyze errors for Mastery Tip
-  let masteryTip: string | null = null;
-  let mostFrequentKey: string | null = null;
-  let mostFrequentCount = 0;
-
-  if (isPerfect) {
-    masteryTip = "🌟 Perfect Technique! Keep maintaining this level of accuracy and focus.";
-  } else if (errorHistory.length > 0) {
-    // Count frequency of missed keys
-    const missedKeys: Record<string, number> = {};
-    errorHistory.forEach((err) => {
-      missedKeys[err.expected] = (missedKeys[err.expected] || 0) + 1;
-    });
-
-    // Find most frequently missed key
-    const topMissed = Object.entries(missedKeys)
-      .sort((a, b) => b[1] - a[1])[0];
-
-    if (topMissed) {
-      mostFrequentKey = topMissed[0];
-      mostFrequentCount = topMissed[1];
-
-      const tipForKey = errorHistory.find((e) => e.expected === mostFrequentKey)?.tip;
-
-      // Determine if it's mostly wrong key or wrong finger
-      const errorsForKey = errorHistory.filter((e) => e.expected === mostFrequentKey);
-      const wrongKeyCount = errorsForKey.filter((e) => e.pressed !== e.expected).length;
-      const wrongFingerCount = errorsForKey.length - wrongKeyCount;
-
-      // Calculate potential improvement
-      const potentialImprovement = Math.round((mostFrequentCount / total) * 100);
-
-      if (wrongKeyCount > wrongFingerCount) {
-        // Wrong key pressed
-        masteryTip = `Focus on finding the '${mostFrequentKey}' key accurately to improve accuracy by ${potentialImprovement}%. ${tipForKey || ""}`;
-      } else {
-        // Wrong finger used
-        masteryTip = `${tipForKey || `Practice using the correct finger for '${mostFrequentKey}'.`} This could improve your accuracy by ${potentialImprovement}%.`;
-      }
-    }
-  }
-
-  return {
-    performanceSummary,
-    masteryTip,
-    isPerfect,
-    totalErrors: errorHistory.length,
-    mostFrequentKey,
-    mostFrequentCount,
-  };
-};
 
 export const SessionComplete = ({
   sessionEnded,
@@ -111,41 +25,239 @@ export const SessionComplete = ({
   incorrectCount,
   typedWordsLength,
   errorHistory,
+  sessionHistory,
   onFinish,
+  finalAnalysis,
 }: SessionCompleteProps) => {
-  const analysis = analyzeSession(wpm, accuracy, correctCount, incorrectCount, errorHistory);
+  // ════════════════════════════════════════════════════════════
+  // LOADING STATE - Professional "Calculating Results..." Effect
+  // ════════════════════════════════════════════════════════════
+  const [isCalculating, setIsCalculating] = useState(true);
+
+  // ════════════════════════════════════════════════════════════
+  // SESSION REPLAY SLIDER STATE
+  // ════════════════════════════════════════════════════════════
+  const [replayIndex, setReplayIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsCalculating(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Use finalAnalysis if available, otherwise calculate fallback
+  const analysis = finalAnalysis?.analysis || analyzeSession(wpm, accuracy, correctCount, incorrectCount, errorHistory);
+  const dbMetrics = finalAnalysis?.dbMetrics || {
+    wpm,
+    netWpm: analysis.netWpm,
+    accuracy: analysis.accuracyPercent,
+    errorRate: analysis.errorRate,
+    compositeScore: analysis.compositeScore
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // TIMELINE SCROLLER LOGIC - Show window of 11 keys centered on active
+  // ════════════════════════════════════════════════════════════
+  const WINDOW_SIZE = 11;
+  const centerOffset = Math.floor(WINDOW_SIZE / 2);
+
+  const getVisibleEntries = () => {
+    if (sessionHistory.length === 0) return [];
+
+    const start = Math.max(0, replayIndex - centerOffset);
+    const end = Math.min(sessionHistory.length, start + WINDOW_SIZE);
+    const adjustedStart = Math.max(0, end - WINDOW_SIZE);
+
+    return sessionHistory.slice(adjustedStart, end).map((entry, idx) => ({
+      ...entry,
+      originalIndex: adjustedStart + idx,
+      isActive: adjustedStart + idx === replayIndex
+    }));
+  };
+
+  const visibleEntries = getVisibleEntries();
+  const currentEntry = sessionHistory[replayIndex];
 
   return (
     <PixelCard className="text-center py-8 shadow-xl w-full max-w-3xl mx-auto">
       {/* Header */}
       <p className="font-pixel text-2xl text-green-400 mb-2 drop-shadow-[0_0_12px_rgba(88,187,120,0.5)]">
-        🎉 Session Complete!
+        Session Complete!
       </p>
       <p className="font-pixel text-[10px] text-muted-foreground/70 uppercase tracking-widest mb-6">
-        {sessionEnded ? "⏰ Time's up!" : "✅ Level finished"}
+        {sessionEnded ? "Time's up!" : "Level finished"}
       </p>
 
-      {/* Metrics Grid */}
+      {/* ═══════════════════════════════════════════════════════════════
+          POSITION 1: 4-Column Metrics Panel
+          ═══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-4 gap-3 max-w-md mx-auto mb-6">
-        <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 px-3 py-2 text-center">
-          <p className="font-pixel text-[8px] text-yellow-400/80 uppercase tracking-wider mb-1">WPM</p>
-          <p className="font-pixel text-xl text-yellow-400">{wpm}</p>
+        {/* Rating (Letter Grade) */}
+        <div className="rounded-lg bg-purple-500/15 border border-purple-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
+          <p className="font-pixel text-[8px] text-purple-400/80 uppercase tracking-wider mb-1">Rating</p>
+          <p className="font-pixel text-xl text-purple-400">
+            {isCalculating ? "-" : analysis.letterGrade}
+          </p>
         </div>
-        <div className="rounded-lg bg-green-500/15 border border-green-500/30 px-3 py-2 text-center">
-          <p className="font-pixel text-[8px] text-green-400/80 uppercase tracking-wider mb-1">Accuracy</p>
-          <p className="font-pixel text-xl text-green-400">{accuracy}%</p>
+
+        {/* Score */}
+        <div className="rounded-lg bg-green-500/15 border border-green-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
+          <p className="font-pixel text-[8px] text-green-400/80 uppercase tracking-wider mb-1">Score</p>
+          <p className="font-pixel text-xl text-green-400">
+            {isCalculating ? "-" : dbMetrics.compositeScore.toFixed(1)}
+          </p>
         </div>
-        <div className="rounded-lg bg-blue-500/15 border border-blue-500/30 px-3 py-2 text-center">
-          <p className="font-pixel text-[8px] text-blue-400/80 uppercase tracking-wider mb-1">Correct</p>
-          <p className="font-pixel text-xl text-blue-400">{correctCount}</p>
+
+        {/* Net WPM */}
+        <div className="rounded-lg bg-blue-500/15 border border-blue-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
+          <p className="font-pixel text-[8px] text-blue-400/80 uppercase tracking-wider mb-1">Net WPM</p>
+          <p className="font-pixel text-xl text-blue-400">
+            {isCalculating ? "-" : dbMetrics.netWpm}
+          </p>
         </div>
-        <div className="rounded-lg bg-red-500/15 border border-red-500/30 px-3 py-2 text-center">
-          <p className="font-pixel text-[8px] text-red-400/80 uppercase tracking-wider mb-1">Errors</p>
-          <p className="font-pixel text-xl text-red-400">{incorrectCount}</p>
+
+        {/* Error Rate */}
+        <div className="rounded-lg bg-red-500/15 border border-red-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
+          <p className="font-pixel text-[8px] text-red-400/80 uppercase tracking-wider mb-1">Error Rate</p>
+          <p className="font-pixel text-xl text-red-400">
+            {isCalculating ? "-" : `${dbMetrics.errorRate.toFixed(1)}%`}
+          </p>
         </div>
       </div>
 
-      {/* Performance Summary */}
+      {/* ═══════════════════════════════════════════════════════════════
+          POSITION 2: Session Replay Section
+          ═══════════════════════════════════════════════════════════════ */}
+      {sessionHistory.length > 0 && (
+        <div className="mb-6 max-w-2xl mx-auto">
+          <p className="font-pixel text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-3 text-left">
+            🎬 Session Replay ({sessionHistory.length} keystrokes)
+          </p>
+
+          {/* Timeline Scroller - Horizontal sliding window with centered cursor */}
+          <div className="bg-card/30 border border-border/50 rounded-lg p-4 mb-3 shadow-inner overflow-hidden">
+            <div className="flex items-center justify-center gap-1 transition-transform duration-200">
+              {visibleEntries.map((entry) => {
+                const statusBgColor =
+                  entry.status === "correct" ? "bg-green-500" :
+                    entry.status === "wrong_finger" ? "bg-orange-500" :
+                      entry.status === "skipped" ? "bg-black" : "bg-red-500";
+
+                return (
+                  <div
+                    key={entry.originalIndex}
+                    className={`transition-all duration-300 ${entry.isActive ? "scale-125 mx-2" : "scale-100 opacity-60"
+                      }`}
+                  >
+                    {/* Character Box with Colored Background */}
+                    <div
+                      className={`font-pixel text-sm px-3 py-2 rounded ${statusBgColor} ${entry.isActive ? "border-2 border-white shadow-lg" : "border border-white/30"
+                        } text-white transition-all duration-200`}
+                    >
+                      {entry.expected === " " ? "␣" : entry.expected}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Slider */}
+          <div className="mb-4">
+            <input
+              type="range"
+              min="0"
+              max={sessionHistory.length - 1}
+              value={replayIndex}
+              onChange={(e) => setReplayIndex(parseInt(e.target.value))}
+              className="w-full h-3 bg-card border-2 border-border/50 rounded-lg appearance-none cursor-pointer pixel-slider"
+              style={{
+                background: `linear-gradient(to right, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0.3) ${(replayIndex / (sessionHistory.length - 1)) * 100}%, rgba(100, 116, 139, 0.2) ${(replayIndex / (sessionHistory.length - 1)) * 100}%, rgba(100, 116, 139, 0.2) 100%)`
+              }}
+            />
+            <div className="flex justify-between mt-1">
+              <span className="font-pixel text-[8px] text-muted-foreground">Keystroke: {replayIndex + 1}</span>
+              <span className="font-pixel text-[8px] text-muted-foreground">Total: {sessionHistory.length}</span>
+            </div>
+          </div>
+
+          {/* Replay Feedback Arena */}
+          {currentEntry && (
+            <div className="flex items-stretch gap-3">
+              {/* Left: Pressed Key Box with Colored Background */}
+              {(() => {
+                const keyBgColor =
+                  currentEntry.status === "correct" ? "bg-green-500" :
+                    currentEntry.status === "wrong_finger" ? "bg-orange-500" :
+                      currentEntry.status === "skipped" ? "bg-black" : "bg-red-500";
+
+                return (
+                  <div className={`flex-shrink-0 w-16 h-16 ${keyBgColor} border-2 border-white/30 rounded-lg flex items-center justify-center shadow-lg`}>
+                    <span className="font-pixel text-2xl text-white uppercase">
+                      {currentEntry.status === "skipped"
+                        ? (currentEntry.expected === " " ? "␣" : currentEntry.expected)
+                        : (currentEntry.char === " " ? "␣" : currentEntry.char)}
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Right: Feedback Card */}
+              {(() => {
+                const isWrongFinger = currentEntry.status === "wrong_finger";
+                const isWrongKey = currentEntry.status === "wrong_key";
+                const isSkipped = currentEntry.status === "skipped";
+
+                let bgColor = "bg-green-500";
+                let icon = "✓";
+                let title = "Correct!";
+                let message = `Perfect! You pressed "${currentEntry.char}" with the correct finger.`;
+
+                if (isSkipped) {
+                  bgColor = "bg-black";
+                  icon = "⏱";
+                  title = "Skipped";
+                  message = `You did not reach "${currentEntry.expected}" before time ran out.`;
+                } else if (isWrongFinger) {
+                  bgColor = "bg-orange-500";
+                  icon = "⚠";
+                  title = "Wrong Finger";
+                  message = currentEntry.hand && currentEntry.finger
+                    ? `You pressed '${currentEntry.char}' with ${currentEntry.hand} ${currentEntry.finger} finger.`
+                    : `You pressed "${currentEntry.char}" but used the wrong finger.`;
+                } else if (isWrongKey) {
+                  bgColor = "bg-red-500";
+                  icon = "✗";
+                  title = "Wrong Key";
+                  message = `You pressed "${currentEntry.char}" instead of "${currentEntry.expected}".`;
+                }
+
+                return (
+                  <div className={`flex-1 ${bgColor} rounded-lg px-4 py-3 flex flex-col justify-center shadow-lg`}>
+                    <div className="font-pixel text-[9px] text-white uppercase tracking-wider mb-1">
+                      {icon} {title}
+                    </div>
+                    <p className="font-pixel text-[10px] text-white leading-tight mb-2">
+                      {message}
+                    </p>
+                    {currentEntry.tip && (
+                      <p className="font-pixel text-[9px] text-white/90 leading-tight">
+                        {currentEntry.tip}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          POSITION 3: Performance Summary
+          ═══════════════════════════════════════════════════════════════ */}
       <div className="mb-4 max-w-2xl mx-auto">
         <p className="font-pixel text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-2 text-left">
           📊 Performance Summary
@@ -155,99 +267,58 @@ export const SessionComplete = ({
         </div>
       </div>
 
-      {/* Mastery Tip */}
+      {/* ═══════════════════════════════════════════════════════════════
+          POSITION 4: Mastery Tip
+          ═══════════════════════════════════════════════════════════════ */}
       {analysis.masteryTip && (
         <div className="mb-6 max-w-2xl mx-auto">
           <p className="font-pixel text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-2 text-left">
             💡 Mastery Tip
           </p>
           <div
-            className={`font-pixel text-[11px] text-foreground text-left border rounded-lg px-4 py-3 leading-relaxed shadow-sm ${
-              analysis.isPerfect
-                ? "bg-green-500/10 border-green-500/30"
-                : "bg-blue-500/10 border-blue-500/30"
-            }`}
+            className={`font-pixel text-[11px] text-foreground text-left border rounded-lg px-4 py-3 leading-relaxed shadow-sm ${analysis.isPerfect
+              ? "bg-green-500/10 border-green-500/30"
+              : "bg-blue-500/10 border-blue-500/30"
+              }`}
           >
             {analysis.masteryTip}
           </div>
         </div>
       )}
 
-      {/* Review Arena - Scrollable Error List */}
-      {errorHistory.length > 0 && (
-        <div className="mb-6 max-w-2xl mx-auto">
-          <p className="font-pixel text-[10px] uppercase tracking-widest text-muted-foreground/70 mb-2 text-left">
-            📝 Review Arena ({analysis.totalErrors} {analysis.totalErrors === 1 ? "mistake" : "mistakes"})
-          </p>
-          <div
-            className="max-h-[300px] overflow-y-auto bg-card/30 border border-border/50 rounded-lg p-3 shadow-inner"
-            style={{
-              scrollbarWidth: 'thin',
-              scrollbarColor: 'rgba(156, 163, 175, 0.3) rgba(0, 0, 0, 0.1)'
-            }}
-          >
-            <div className="flex flex-col gap-2">
-              {errorHistory.map((error, idx) => {
-                const isWrongKey = error.pressed !== error.expected;
-                const errorType = isWrongKey ? "Wrong Key Pressed" : "Wrong Finger";
-
-                return (
-                  <PixelCard
-                    key={idx}
-                    className="p-3 bg-card border-red-500/30 shadow-sm"
-                  >
-                    {/* Error Header */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-pixel text-[8px] uppercase tracking-wider px-2 py-1 rounded bg-red-500/20 text-red-300">
-                        {errorType}
-                      </span>
-                      {isWrongKey && (
-                        <span className="font-pixel text-[9px] text-muted-foreground">
-                          for <span className="text-green-400 font-bold">"{error.expected}"</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Error Body */}
-                    <p className="font-pixel text-[10px] text-foreground leading-relaxed">
-                      You pressed{" "}
-                      <span className="text-red-400 font-bold">"{error.pressed}"</span>
-                      {" "}instead of{" "}
-                      <span className="text-green-400 font-bold">"{error.expected}"</span>.
-                    </p>
-
-                    {/* Correction Tip */}
-                    <p className="font-pixel text-[9px] text-blue-400 mt-2 leading-relaxed">
-                      ✓ {error.tip}
-                    </p>
-                  </PixelCard>
-                );
-              })}
-            </div>
-          </div>
-          <style>{`
-            .max-h-\\[300px\\]::-webkit-scrollbar {
-              width: 8px;
-            }
-            .max-h-\\[300px\\]::-webkit-scrollbar-track {
-              background: rgba(0, 0, 0, 0.1);
-              border-radius: 4px;
-            }
-            .max-h-\\[300px\\]::-webkit-scrollbar-thumb {
-              background: rgba(156, 163, 175, 0.3);
-              border-radius: 4px;
-            }
-            .max-h-\\[300px\\]::-webkit-scrollbar-thumb:hover {
-              background: rgba(156, 163, 175, 0.5);
-            }
-          `}</style>
-        </div>
-      )}
-
       {/* Action Button */}
       <PixelButton variant="primary" size="md" className="mt-2" onClick={onFinish}>
-        🏠 Back to Play
+        Back to Play
       </PixelButton>
+
+      {/* Slider Styles */}
+      <style>{`
+        .pixel-slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          background: white;
+          border: 2px solid rgba(34, 197, 94, 0.8);
+          border-radius: 2px;
+          cursor: pointer;
+          box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        }
+        .pixel-slider::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          background: white;
+          border: 2px solid rgba(34, 197, 94, 0.8);
+          border-radius: 2px;
+          cursor: pointer;
+          box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        }
+        .pixel-slider::-webkit-slider-thumb:hover {
+          box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+        }
+        .pixel-slider::-moz-range-thumb:hover {
+          box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+        }
+      `}</style>
     </PixelCard>
   );
 };

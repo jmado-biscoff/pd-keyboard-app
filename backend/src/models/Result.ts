@@ -13,6 +13,13 @@ const ResultSchema = new mongoose.Schema(
       default: "practice",
       required: true,
     },
+    correctCount: { type: Number, default: 0 },
+    wrongKeysCount: { type: Number, default: 0 },
+    wrongFingersCount: { type: Number, default: 0 },
+    skippedCount: { type: Number, default: 0 },
+    compositeScore: { type: Number, default: 0 },
+    netWpm: { type: Number, default: 0 },
+    errorRate: { type: Number, default: 0 },
     date: { type: Date, default: Date.now },
   },
   { timestamps: true }

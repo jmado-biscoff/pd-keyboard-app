@@ -204,13 +204,12 @@ export const VideoFeed = ({ detecting, calibrationDone, baseUrl }: VideoFeedProp
             {/* FPS indicator - always show when detecting */}
             {fps > 0 && (
               <span
-                className={`font-pixel text-[8px] px-1.5 py-0.5 rounded ${
-                  fps >= 50
+                className={`font-pixel text-[8px] px-1.5 py-0.5 rounded ${fps >= 50
                     ? "bg-green-500/20 text-green-400"
                     : fps >= 30
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : "bg-red-500/20 text-red-400"
-                }`}
+                      ? "bg-yellow-500/20 text-yellow-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}
               >
                 {fps} FPS
               </span>
@@ -245,7 +244,6 @@ export const VideoFeed = ({ detecting, calibrationDone, baseUrl }: VideoFeedProp
             {/* Low FPS warning overlay */}
             {fps > 0 && fps < 45 && (
               <div className="absolute top-2 right-2 bg-red-500/90 text-white px-2 py-1 rounded text-[8px] font-pixel">
-                ⚠️ FPS DROP: {fps}
               </div>
             )}
           </>

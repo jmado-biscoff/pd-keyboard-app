@@ -61,7 +61,6 @@ export const VirtualKeyboard = ({ activeKeys }: VirtualKeyboardProps) => {
   return (
     <div className="flex flex-col items-center">
       <div className="font-pixel text-[8px] uppercase tracking-widest text-muted-foreground/60 mb-1.5">
-        ⌨️ Keyboard — 60% Layout
       </div>
       <div className="flex flex-col items-center gap-2 bg-card/30 rounded-lg px-4 py-3 border border-border/30 shadow-inner">
         {keyboardLayout.map((row, rowIdx) => (
