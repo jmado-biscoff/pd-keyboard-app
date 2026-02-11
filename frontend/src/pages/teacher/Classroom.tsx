@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Logo } from "@/components/Logo";
 import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
@@ -12,8 +12,13 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
+  Settings,
+  Clock,
+  BarChart3,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import StudentAnalyticsModal from "@/components/teacher/StudentAnalyticsModal";
 
 export default function Classroom() {
   const navigate = useNavigate();
@@ -27,6 +32,24 @@ export default function Classroom() {
     Record<string, any[]>
   >({});
   const [loadingStudents, setLoadingStudents] = useState(false);
+
+  // Evaluation settings state
+  const [evalSettingsMap, setEvalSettingsMap] = useState<
+    Record<string, { level: string; proctorTimerMinutes: number; isActive: boolean; activatedAt: string | null }>
+  >({});
+  const [evalCountdowns, setEvalCountdowns] = useState<Record<string, number>>({});
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Student analytics modal state
+  const [analyticsModal, setAnalyticsModal] = useState<{
+    open: boolean;
+    studentId: string;
+    studentName: string;
+    classroomId: string;
+  }>({ open: false, studentId: "", studentName: "", classroomId: "" });
 
   // 🔹 Fetch classrooms from backend
   const fetchClassrooms = async () => {
@@ -48,6 +71,122 @@ export default function Classroom() {
   useEffect(() => {
     fetchClassrooms();
   }, []);
+
+  // Initialize eval settings from classroom data
+  useEffect(() => {
+    classrooms.forEach((cls) => {
+      if (cls.activeEvaluation && !evalSettingsMap[cls._id]) {
+        setEvalSettingsMap((prev) => ({
+          ...prev,
+          [cls._id]: {
+            level: cls.activeEvaluation.level || "characters",
+            proctorTimerMinutes: cls.activeEvaluation.proctorTimerMinutes || 30,
+            isActive: cls.activeEvaluation.isActive || false,
+            activatedAt: cls.activeEvaluation.activatedAt || null,
+          },
+        }));
+      }
+    });
+  }, [classrooms]);
+
+  // Countdown timer for active evaluations
+  useEffect(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    countdownRef.current = setInterval(() => {
+      setEvalCountdowns((prev) => {
+        const next: Record<string, number> = {};
+        for (const [id, settings] of Object.entries(evalSettingsMap)) {
+          if (settings.isActive && settings.activatedAt) {
+            const elapsed = (Date.now() - new Date(settings.activatedAt).getTime()) / 1000;
+            const total = settings.proctorTimerMinutes * 60;
+            const remaining = Math.max(0, Math.floor(total - elapsed));
+            next[id] = remaining;
+            if (remaining <= 0) {
+              setEvalSettingsMap((p) => ({ ...p, [id]: { ...p[id], isActive: false, activatedAt: null } }));
+            }
+          }
+        }
+        return next;
+      });
+    }, 1000);
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [evalSettingsMap]);
+
+  // Save evaluation settings
+  const saveEvalSettings = async (classroomId: string) => {
+    const settings = evalSettingsMap[classroomId];
+    if (!settings) return;
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}/evaluation`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ level: settings.level, proctorTimerMinutes: settings.proctorTimerMinutes }),
+        }
+      );
+      if (res.ok) toast.success("Settings saved");
+      else toast.error("Failed to save settings");
+    } catch { toast.error("Error saving settings"); }
+  };
+
+  // Toggle evaluation activation
+  const toggleEvaluation = async (classroomId: string) => {
+    const settings = evalSettingsMap[classroomId];
+    const activate = !settings?.isActive;
+    try {
+      // Save settings first if activating
+      if (activate) await saveEvalSettings(classroomId);
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}/evaluation/activate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ activate }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(activate ? "Evaluation activated!" : "Evaluation deactivated");
+        setEvalSettingsMap((prev) => ({
+          ...prev,
+          [classroomId]: {
+            ...prev[classroomId],
+            isActive: data.activeEvaluation.isActive,
+            activatedAt: data.activeEvaluation.activatedAt,
+          },
+        }));
+      } else toast.error(data.message || "Failed to toggle evaluation");
+    } catch { toast.error("Error toggling evaluation"); }
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // 🔹 Delete classroom
+  const handleDelete = async (classroomId: string) => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Classroom deleted!");
+        setClassrooms((prev) => prev.filter((c) => c._id !== classroomId));
+        setDeleteConfirm(null);
+        if (expanded === classroomId) setExpanded(null);
+      } else toast.error(data.message || "Failed to delete classroom");
+    } catch {
+      toast.error("Error deleting classroom");
+    }
+  };
 
   // 🔹 Create new classroom
   const handleCreate = async () => {
@@ -230,6 +369,13 @@ export default function Classroom() {
                   >
                     <Users size={16} />
                   </PixelButton>
+                  <PixelButton
+                    variant="red"
+                    onClick={() => setDeleteConfirm(cls._id)}
+                    className="hover:scale-110 transition-transform"
+                  >
+                    <Trash2 size={16} />
+                  </PixelButton>
                 </div>
               </div>
 
@@ -303,7 +449,15 @@ export default function Classroom() {
                           {studentsMap[cls._id].map((student, idx) => (
                             <li
                               key={student._id}
-                              className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md"
+                              className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md cursor-pointer hover:bg-white/20 transition-colors"
+                              onClick={() =>
+                                setAnalyticsModal({
+                                  open: true,
+                                  studentId: student._id,
+                                  studentName: student.name || "Unnamed Student",
+                                  classroomId: cls._id,
+                                })
+                              }
                             >
                               <div className="flex items-center gap-2">
                                 <span className="text-lg">
@@ -311,9 +465,12 @@ export default function Classroom() {
                                 </span>
                                 <span>{student.name || "Unnamed Student"}</span>
                               </div>
-                              <span className="opacity-70 text-[10px]">
-                                {student.email}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="opacity-70 text-[10px]">
+                                  {student.email}
+                                </span>
+                                <BarChart3 size={14} className="opacity-60" />
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -322,6 +479,81 @@ export default function Classroom() {
                           📭 No students joined yet.
                         </p>
                       )}
+
+                      {/* Evaluation Settings Panel */}
+                      <div className="mt-6 border-t border-white/20 pt-4">
+                        <h3 className="font-pixel text-sm mb-3 flex items-center gap-2">
+                          <Settings size={16} /> Evaluation Settings
+                        </h3>
+
+                        {/* Level Selector */}
+                        <div className="mb-3">
+                          <p className="font-pixel text-[10px] opacity-70 mb-2">LEVEL</p>
+                          <div className="flex gap-2">
+                            {(["characters", "words", "both"] as const).map((lvl) => (
+                              <PixelButton
+                                key={lvl}
+                                size="sm"
+                                variant={evalSettingsMap[cls._id]?.level === lvl ? "accent" : "secondary"}
+                                onClick={() =>
+                                  setEvalSettingsMap((prev) => ({
+                                    ...prev,
+                                    [cls._id]: { ...prev[cls._id], level: lvl },
+                                  }))
+                                }
+                                disabled={evalSettingsMap[cls._id]?.isActive}
+                              >
+                                {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                              </PixelButton>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Proctor Timer Slider */}
+                        <div className="mb-3">
+                          <p className="font-pixel text-[10px] opacity-70 mb-2">
+                            <Clock size={12} className="inline mr-1" />
+                            SESSION LENGTH: {evalSettingsMap[cls._id]?.proctorTimerMinutes || 30} MINUTES
+                          </p>
+                          <input
+                            type="range"
+                            min={5}
+                            max={60}
+                            step={1}
+                            value={evalSettingsMap[cls._id]?.proctorTimerMinutes || 30}
+                            onChange={(e) => {
+                              setEvalSettingsMap((prev) => ({
+                                ...prev,
+                                [cls._id]: { ...prev[cls._id], proctorTimerMinutes: Number(e.target.value) },
+                              }));
+                            }}
+                            disabled={evalSettingsMap[cls._id]?.isActive}
+                            className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/20 accent-orange-400 disabled:opacity-50"
+                          />
+                          <div className="flex justify-between font-pixel text-[9px] opacity-50 mt-1">
+                            <span>5 min</span>
+                            <span>60 min</span>
+                          </div>
+                        </div>
+
+                        {/* Activate/Deactivate Toggle */}
+                        <div className="flex items-center gap-3">
+                          <PixelButton
+                            variant={evalSettingsMap[cls._id]?.isActive ? "red" : "green"}
+                            onClick={() => toggleEvaluation(cls._id)}
+                          >
+                            {evalSettingsMap[cls._id]?.isActive
+                              ? "Deactivate"
+                              : "Activate Evaluation"}
+                          </PixelButton>
+
+                          {evalSettingsMap[cls._id]?.isActive && evalCountdowns[cls._id] !== undefined && (
+                            <span className="font-pixel text-sm animate-pulse">
+                              {formatCountdown(evalCountdowns[cls._id])} remaining
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
@@ -336,6 +568,35 @@ export default function Classroom() {
           </p>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <PixelCard variant="red" className="text-white max-w-sm w-full mx-4">
+            <h3 className="font-pixel text-lg mb-3">Delete Classroom?</h3>
+            <p className="font-pixel text-xs opacity-80 mb-6">
+              This will permanently remove the classroom and unenroll all students. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <PixelButton variant="secondary" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </PixelButton>
+              <PixelButton variant="red" onClick={() => handleDelete(deleteConfirm)}>
+                Delete
+              </PixelButton>
+            </div>
+          </PixelCard>
+        </div>
+      )}
+
+      {/* Student Analytics Modal */}
+      <StudentAnalyticsModal
+        open={analyticsModal.open}
+        onClose={() => setAnalyticsModal((prev) => ({ ...prev, open: false }))}
+        studentId={analyticsModal.studentId}
+        studentName={analyticsModal.studentName}
+        classroomId={analyticsModal.classroomId}
+      />
     </div>
   );
 }

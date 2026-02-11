@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { PixelCard } from "@/components/PixelCard";
+import { PixelButton } from "@/components/PixelButton";
+import { Clock } from "lucide-react";
 import learnIcon from "@/assets/file-logo.png";
 import settingsIcon from "@/assets/settings-logo.png";
 import playIcon from "@/assets/keyboard-logo.png";
@@ -13,6 +15,8 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const userName = localStorage.getItem("userName") || "Student";
   const [classrooms, setClassrooms] = useState<any[]>([]);
+  const [activeEvalName, setActiveEvalName] = useState<string | null>(null);
+  const [evalRemaining, setEvalRemaining] = useState(0);
 
   // 🔹 Fetch classrooms the student has joined
   useEffect(() => {
@@ -33,6 +37,26 @@ export default function StudentDashboard() {
       }
     };
     fetchClassrooms();
+
+    // Check for active evaluation
+    const checkEval = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+        const res = await fetch(`${BASE_URL}/api/student/evaluation-status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasActiveEvaluation && data.evaluation) {
+            setActiveEvalName(data.evaluation.classroomName);
+            setEvalRemaining(data.evaluation.remainingSeconds);
+          }
+        }
+      } catch { /* silent */ }
+    };
+    checkEval();
   }, []);
 
   const menuItems = [
@@ -93,6 +117,28 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {/* Active Evaluation Banner */}
+          {activeEvalName && evalRemaining > 0 && (
+            <PixelCard variant="red" className="text-white mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock size={20} />
+                  <div>
+                    <p className="font-pixel text-sm">
+                      Active Evaluation — {activeEvalName}
+                    </p>
+                    <p className="font-pixel text-[10px] opacity-80">
+                      {Math.ceil(evalRemaining / 60)} minutes remaining
+                    </p>
+                  </div>
+                </div>
+                <PixelButton variant="accent" size="sm" onClick={() => navigate("/student/play")}>
+                  Go to Evaluation
+                </PixelButton>
+              </div>
+            </PixelCard>
+          )}
+
           {/* 🟣 My Classrooms Section */}
           <PixelCard variant="purple" className="text-white mb-10">
             <h2 className="font-pixel text-xl mb-4">My Classrooms</h2>
@@ -103,7 +149,12 @@ export default function StudentDashboard() {
                     key={cls._id}
                     className="font-pixel text-sm flex justify-between border-b border-white/20 pb-1"
                   >
-                    <span>{cls.name}</span>
+                    <span>
+                      {cls.name}
+                      {cls.teacher?.name && (
+                        <span className="opacity-70 text-xs ml-2">| Teacher: {cls.teacher.name}</span>
+                      )}
+                    </span>
                     <span className="opacity-70">{cls.code}</span>
                   </li>
                 ))}

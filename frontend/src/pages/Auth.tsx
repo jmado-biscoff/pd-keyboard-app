@@ -187,28 +187,30 @@ export default function Auth() {
               </div>
             )}
 
-            {/* Role selector */}
-            <div>
-              <label className="block font-pixel text-xs mb-2">I am a</label>
-              <div className="flex gap-2">
-                <PixelButton
-                  type="button"
-                  variant={userType === "student" ? "accent" : "primary"}
-                  className="flex-1"
-                  onClick={() => setUserType("student")}
-                >
-                  Student
-                </PixelButton>
-                <PixelButton
-                  type="button"
-                  variant={userType === "teacher" ? "accent" : "primary"}
-                  className="flex-1"
-                  onClick={() => setUserType("teacher")}
-                >
-                  Teacher
-                </PixelButton>
+            {/* Role selector — only visible during signup */}
+            {authMode === "signup" && (
+              <div>
+                <label className="block font-pixel text-xs mb-2">I am a</label>
+                <div className="flex gap-2">
+                  <PixelButton
+                    type="button"
+                    variant={userType === "student" ? "accent" : "primary"}
+                    className="flex-1"
+                    onClick={() => setUserType("student")}
+                  >
+                    Student
+                  </PixelButton>
+                  <PixelButton
+                    type="button"
+                    variant={userType === "teacher" ? "accent" : "primary"}
+                    className="flex-1"
+                    onClick={() => setUserType("teacher")}
+                  >
+                    Teacher
+                  </PixelButton>
+                </div>
               </div>
-            </div>
+            )}
 
             <PixelButton
               type="submit"

@@ -1,12 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
-import { ArrowLeft, Trophy, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, Trophy, Clock, RefreshCw, Lock } from "lucide-react";
 import bgVideo from "@/assets/bg1.mp4";
 
 const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+
+interface EvaluationStatus {
+  hasActiveEvaluation: boolean;
+  evaluation: {
+    classroomId: string;
+    classroomName: string;
+    level: "characters" | "words" | "both";
+    proctorTimerMinutes: number;
+    activatedAt: string;
+    expiresAt: string;
+    remainingSeconds: number;
+    maxAttempts: number;
+  } | null;
+}
 
 export default function Play() {
   const navigate = useNavigate();
@@ -15,10 +29,28 @@ export default function Play() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Evaluation state
+  const [evalStatus, setEvalStatus] = useState<EvaluationStatus | null>(null);
+  const [proctorTimeLeft, setProctorTimeLeft] = useState(0);
+  const [attemptCounts, setAttemptCounts] = useState<Record<number, number>>({});
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const levels = [
-    { id: 1, name: "Level 1", description: "50 random characters" },
-    { id: 2, name: "Level 2", description: "50-character word sequence" },
+    { id: 1, name: "Characters", description: "50 random characters" },
+    { id: 2, name: "Words", description: "50-character word sequence" },
   ];
+
+  const hasActiveEval = evalStatus?.hasActiveEvaluation === true && evalStatus.evaluation !== null;
+  const evalLevel = evalStatus?.evaluation?.level;
+  const maxAttempts = evalStatus?.evaluation?.maxAttempts || 3;
+
+  // Map eval level to numeric levels
+  const evalLevels: number[] = hasActiveEval
+    ? evalLevel === "characters" ? [1]
+      : evalLevel === "words" ? [2]
+      : [1, 2]
+    : [];
 
   // 🔹 Fetch recent sessions from MongoDB (Privacy filtered)
   const fetchResults = async () => {
@@ -31,32 +63,98 @@ export default function Play() {
       const data = await res.json();
       setHistory(data);
     } catch (err) {
-      console.error("❌ Failed to fetch results:", err);
-      setHistory([]); // Set empty array if backend unavailable
+      console.error("Failed to fetch results:", err);
+      setHistory([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 🔹 Fetch evaluation status
+  const fetchEvalStatus = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/student/evaluation-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data: EvaluationStatus = await res.json();
+        setEvalStatus(data);
+        if (data.hasActiveEvaluation && data.evaluation) {
+          setProctorTimeLeft(data.evaluation.remainingSeconds);
+          setSessionType("evaluated");
+          // Fetch attempt counts
+          fetchAttemptCounts(data.evaluation.activatedAt);
+        }
+      }
+    } catch { /* silent */ }
+  };
+
+  // 🔹 Fetch attempt counts for the current evaluation window
+  const fetchAttemptCounts = async (activatedAt: string) => {
+    const userId = localStorage.getItem("userName") || "guest";
+    try {
+      const [res1, res2] = await Promise.all([
+        fetch(`${BASE_URL}/api/results/count?userId=${userId}&since=${activatedAt}&level=1`),
+        fetch(`${BASE_URL}/api/results/count?userId=${userId}&since=${activatedAt}&level=2`),
+      ]);
+      const d1 = res1.ok ? await res1.json() : { count: 0 };
+      const d2 = res2.ok ? await res2.json() : { count: 0 };
+      setAttemptCounts({ 1: d1.count, 2: d2.count });
+    } catch { /* silent */ }
+  };
+
   // Fetch on mount
   useEffect(() => {
     fetchResults();
+    fetchEvalStatus();
   }, []);
 
-  // Refresh data when window gains focus (user returns from typing session)
+  // Poll evaluation status every 30s
+  useEffect(() => {
+    pollRef.current = setInterval(fetchEvalStatus, 30000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Countdown timer for proctor clock
+  useEffect(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    if (hasActiveEval && proctorTimeLeft > 0) {
+      countdownRef.current = setInterval(() => {
+        setProctorTimeLeft((prev) => {
+          if (prev <= 1) {
+            setEvalStatus({ hasActiveEvaluation: false, evaluation: null });
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [hasActiveEval, proctorTimeLeft > 0]);
+
+  // Refresh data when window gains focus
   useEffect(() => {
     const handleFocus = () => {
-      console.log("🔄 Window focused - refreshing dashboard data");
       fetchResults();
+      fetchEvalStatus();
     };
-
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   // 🔹 Start typing session
-  const startSession = () => {
-    navigate(`/student/play/session?type=${sessionType}&level=${level}`);
+  const startSession = (overrideLevel?: number) => {
+    const targetLevel = overrideLevel || level;
+    const targetType = hasActiveEval ? "evaluated" : sessionType;
+    navigate(`/student/play/session?type=${targetType}&level=${targetLevel}`);
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
   // 🔹 Compute best WPM for Stats card
@@ -92,6 +190,31 @@ export default function Play() {
             <Logo />
           </div>
 
+          {/* Evaluation Banner */}
+          {hasActiveEval && (
+            <PixelCard variant="red" className="text-white mb-4 bg-red-900/60 border-[3px] border-red-400 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Lock size={20} />
+                  <div>
+                    <p className="font-pixel text-sm">
+                      Active Evaluation — {evalStatus!.evaluation!.classroomName}
+                    </p>
+                    <p className="font-pixel text-[10px] opacity-80">
+                      Level: {evalLevel!.charAt(0).toUpperCase() + evalLevel!.slice(1)} | Max {maxAttempts} attempts
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock size={16} />
+                  <span className="font-pixel text-lg animate-pulse">
+                    {formatCountdown(proctorTimeLeft)}
+                  </span>
+                </div>
+              </div>
+            </PixelCard>
+          )}
+
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
             {/* 🔸 Session Setup */}
             <PixelCard
@@ -107,54 +230,110 @@ export default function Play() {
                   <div className="flex gap-2">
                     <PixelButton
                       variant={sessionType === "practice" ? "accent" : "primary"}
-                      onClick={() => setSessionType("practice")}
+                      onClick={() => { if (!hasActiveEval) setSessionType("practice"); }}
                       className="flex-1"
+                      disabled={hasActiveEval}
                     >
                       Practice
                     </PixelButton>
                     <PixelButton
                       variant={sessionType === "evaluated" ? "accent" : "primary"}
-                      onClick={() => setSessionType("evaluated")}
+                      onClick={() => { if (!hasActiveEval) setSessionType("evaluated"); }}
                       className="flex-1"
+                      disabled={!hasActiveEval && true}
                     >
-                      Evaluated
+                      <span className="flex items-center justify-center gap-1">
+                        Evaluated
+                        {!hasActiveEval && <Lock size={12} />}
+                      </span>
                     </PixelButton>
                   </div>
                   <p className="font-pixel text-[10px] mt-2 opacity-90">
-                    {sessionType === "practice"
-                      ? "Not graded, perfect for drills"
-                      : "Graded and recorded for progress"}
+                    {hasActiveEval
+                      ? "Locked to Evaluated — teacher evaluation is active"
+                      : sessionType === "practice"
+                        ? "Not graded, perfect for drills"
+                        : "Requires teacher activation"}
                   </p>
                 </div>
 
                 {/* Level Selection */}
-                <div>
-                  <label className="block font-pixel text-xs mb-3">Select Level</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {levels.map((lvl) => (
-                      <PixelButton
-                        key={lvl.id}
-                        variant={level === lvl.id ? "accent" : "primary"}
-                        onClick={() => setLevel(lvl.id)}
-                        size="sm"
-                      >
-                        {lvl.name}
-                      </PixelButton>
-                    ))}
+                {!hasActiveEval && (
+                  <div>
+                    <label className="block font-pixel text-xs mb-3">Select Level</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {levels.map((lvl) => (
+                        <PixelButton
+                          key={lvl.id}
+                          variant={level === lvl.id ? "accent" : "primary"}
+                          onClick={() => setLevel(lvl.id)}
+                          size="sm"
+                        >
+                          {lvl.name}
+                        </PixelButton>
+                      ))}
+                    </div>
+                    <p className="font-pixel text-[10px] mt-2 opacity-90">
+                      {levels.find((l) => l.id === level)?.description}
+                    </p>
                   </div>
-                  <p className="font-pixel text-[10px] mt-2 opacity-90">
-                    {levels.find((l) => l.id === level)?.description}
-                  </p>
-                </div>
+                )}
 
-                <PixelButton
-                  variant="accent"
-                  onClick={startSession}
-                  className="w-full"
-                  size="lg"
-                >
-                  Start Typing!
-                </PixelButton>
+                {/* Evaluation Start Buttons + Life Bars */}
+                {hasActiveEval ? (
+                  <div className="space-y-3">
+                    {evalLevels.map((lvl) => {
+                      const attempts = attemptCounts[lvl] || 0;
+                      const remaining = maxAttempts - attempts;
+                      const exhausted = attempts >= maxAttempts;
+                      const expired = proctorTimeLeft <= 0;
+                      const label = lvl === 1 ? "Characters" : "Words";
+                      return (
+                        <div
+                          key={lvl}
+                          className="flex items-center justify-between bg-black/30 rounded-lg px-3 py-2 border border-white/10"
+                        >
+                          {/* Button — fixed width */}
+                          <PixelButton
+                            variant={exhausted || expired ? "secondary" : "accent"}
+                            onClick={() => startSession(lvl)}
+                            size="sm"
+                            disabled={exhausted || expired}
+                            className="w-44 text-center"
+                          >
+                            {expired ? "Expired" : exhausted ? `${label} — Done` : label}
+                          </PixelButton>
+                          {/* Life Bars — right side */}
+                          <div className="flex items-center gap-2">
+                            {Array.from({ length: maxAttempts }).map((_, i) => (
+                              <div
+                                key={i}
+                                className={`w-7 h-5 border-2 rounded-sm transition-all ${
+                                  i < remaining
+                                    ? "bg-green-500 border-green-300 shadow-[0_0_6px_rgba(34,197,94,0.4)]"
+                                    : "bg-gray-700/50 border-gray-600/50 opacity-40"
+                                }`}
+                              />
+                            ))}
+                            <span className="font-pixel text-[10px] opacity-60 w-8 text-right">
+                              {remaining}/{maxAttempts}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <PixelButton
+                    variant="accent"
+                    onClick={() => startSession()}
+                    className="w-full"
+                    size="lg"
+                    disabled={sessionType === "evaluated"}
+                  >
+                    {sessionType === "evaluated" ? "Requires Teacher Activation" : "Start Typing!"}
+                  </PixelButton>
+                )}
               </div>
             </PixelCard>
 
@@ -323,7 +502,7 @@ export default function Play() {
                       className="pixel-border p-4 bg-black/50 flex items-center justify-between text-white border border-yellow-300 rounded-md"
                     >
                       <div>
-                        <p className="font-pixel text-sm">Level {session.level}</p>
+                        <p className="font-pixel text-sm">{session.level === 1 ? "Characters" : session.level === 2 ? "Words" : `Level ${session.level}`}</p>
                         <p className="font-pixel text-xs opacity-80">
                           {new Date(session.date).toISOString().split("T")[0]}
                         </p>

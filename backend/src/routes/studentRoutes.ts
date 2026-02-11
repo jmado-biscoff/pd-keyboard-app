@@ -92,15 +92,73 @@ studentRoutes.get(
           .json({ message: "Access denied. Students only." });
       }
 
-      // Find classrooms that include this student’s ID
-      const classrooms = await Classroom.find({ students: user.id }).select(
-        "name code"
-      );
+      // Find classrooms that include this student's ID, populate teacher name
+      const classrooms = await Classroom.find({ students: user.id })
+        .select("name code teacher")
+        .populate("teacher", "name");
 
       res.status(200).json(classrooms);
     } catch (error) {
       console.error("❌ Error fetching student classrooms:", error);
       res.status(500).json({ message: "Failed to load classrooms" });
+    }
+  }
+);
+
+/**
+ * @route GET /api/student/evaluation-status
+ * @desc Check if student has an active evaluation in any enrolled classroom
+ */
+studentRoutes.get(
+  "/evaluation-status",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "student") {
+        return res.status(403).json({ message: "Access denied. Students only." });
+      }
+
+      // Find classrooms this student is enrolled in
+      const classrooms = await Classroom.find({ students: user.id });
+
+      // Check for any active evaluation
+      for (const classroom of classrooms) {
+        const eval_ = classroom.activeEvaluation;
+        if (eval_ && eval_.isActive && eval_.activatedAt) {
+          const activatedAt = new Date(eval_.activatedAt).getTime();
+          const expiresAt = activatedAt + eval_.proctorTimerMinutes * 60 * 1000;
+          const now = Date.now();
+          const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
+
+          if (remainingSeconds <= 0) {
+            // Evaluation has expired — auto-deactivate
+            eval_.isActive = false;
+            eval_.activatedAt = null;
+            await classroom.save();
+            continue;
+          }
+
+          return res.json({
+            hasActiveEvaluation: true,
+            evaluation: {
+              classroomId: classroom._id,
+              classroomName: classroom.name,
+              level: eval_.level,
+              proctorTimerMinutes: eval_.proctorTimerMinutes,
+              activatedAt: eval_.activatedAt.toISOString(),
+              expiresAt: new Date(expiresAt).toISOString(),
+              remainingSeconds,
+              maxAttempts: eval_.maxAttempts,
+            },
+          });
+        }
+      }
+
+      return res.json({ hasActiveEvaluation: false, evaluation: null });
+    } catch (error) {
+      console.error("Error checking evaluation status:", error);
+      res.status(500).json({ message: "Failed to check evaluation status" });
     }
   }
 );

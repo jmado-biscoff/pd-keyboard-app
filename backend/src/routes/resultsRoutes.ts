@@ -74,6 +74,34 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // ================================================
+// ✅ GET /api/results/count → Count evaluated attempts in a time window
+// ================================================
+router.get("/count", async (req: Request, res: Response) => {
+  try {
+    const { userId, since, level } = req.query;
+
+    if (!userId || !since) {
+      return res.status(400).json({ message: "userId and since are required" });
+    }
+
+    const filter: any = {
+      userId,
+      sessionType: "evaluated",
+      createdAt: { $gte: new Date(since as string) },
+    };
+    if (level) {
+      filter.level = Number(level);
+    }
+
+    const count = await Result.countDocuments(filter);
+    res.json({ count });
+  } catch (error) {
+    console.error("Error counting results:", error);
+    res.status(500).json({ message: "Failed to count results" });
+  }
+});
+
+// ================================================
 // ✅ DELETE /api/results/clear → Clear all session history (for testing/cleanup)
 // ================================================
 router.delete("/clear", async (req: Request, res: Response) => {
