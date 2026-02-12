@@ -4,7 +4,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+// Load .env from project root (one directory up from backend/)
+dotenv.config({ path: path.join(process.cwd(), "../.env") });
 
 import authRoutes from "./routes/authRoutes";
 import studentRoutes from "./routes/studentRoutes";
@@ -36,13 +37,15 @@ app.get("/", (req: Request, res: Response) => {
   res.send("Typing App Backend is running...");
 });
 
-// Database + server start
+// Database connection
 mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log("MongoDB connected successfully to:", MONGO_URI);
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
   })
   .catch((err) => {
     console.error("MongoDB connection error:", err.message);
   });
+
+// Start server regardless of MongoDB connection
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

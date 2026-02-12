@@ -1,0 +1,2 @@
+timestamp,pressed_key,finger_name,hand_used,dx,dy,distance,norm_dx,norm_dy,norm_distance,expected_key,ml_label
+1770864111.11822,s,ring,left,-2,-11,11.180339887498949,-0.0015625,-0.015277777777777777,0.007612899017720249,m,Correct

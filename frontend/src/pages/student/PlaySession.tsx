@@ -1207,7 +1207,7 @@ export default function PlaySession() {
   // UI — Compact Boxed Arena Layout
   // ============================================================
   return (
-    <div className="min-h-screen flex items-start justify-center bg-background p-4 pt-6">
+    <div className="min-h-screen flex items-start justify-center bg-[#D1BCDC] p-4 pt-6">
       <CalibrationOverlay
         isCalibrating={isCalibrating}
         showCalibrationComplete={showCalibrationComplete}

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import StudentAnalyticsModal from "@/components/teacher/StudentAnalyticsModal";
+import bgVideo from "@/assets/b11.mp4";
 
 export default function Classroom() {
   const navigate = useNavigate();
@@ -308,8 +309,21 @@ export default function Classroom() {
   };
 
   return (
-    <div className="min-h-screen p-8 bg-gradient-to-br from-[#ffb067]/10 to-[#ffa94d]/20">
-      <div className="max-w-6xl mx-auto">
+    <div className="relative min-h-screen overflow-hidden">
+      {/* Background Video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute top-0 left-0 w-full h-full object-cover -z-10"
+      >
+        <source src={bgVideo} type="video/mp4" />
+      </video>
+
+      {/* Page Content */}
+      <div className="relative z-10 p-8 bg-black/20 min-h-screen">
+        <div className="max-w-6xl mx-auto">
         {/* 🔙 Back to Dashboard */}
         <div className="flex items-center gap-4 mb-12">
           <PixelButton
@@ -567,6 +581,7 @@ export default function Classroom() {
             No classrooms yet. Create one above!
           </p>
         )}
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
