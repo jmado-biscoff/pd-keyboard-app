@@ -113,7 +113,7 @@ teacherRoutes.get(
       // Find the classroom and populate student details
       const classroom = await Classroom.findById(id).populate(
         "students",
-        "name email"
+        "name email profilePicture"
       );
 
       if (!classroom) {
@@ -361,9 +361,11 @@ teacherRoutes.post(
       if (activate) {
         classroom.activeEvaluation.isActive = true;
         classroom.activeEvaluation.activatedAt = new Date();
+        classroom.activeEvaluation.sessionId = `${req.params.id}_${Date.now()}`;
       } else {
         classroom.activeEvaluation.isActive = false;
         classroom.activeEvaluation.activatedAt = null;
+        classroom.activeEvaluation.sessionId = null;
       }
 
       await classroom.save();

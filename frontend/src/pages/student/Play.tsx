@@ -19,6 +19,7 @@ interface EvaluationStatus {
     expiresAt: string;
     remainingSeconds: number;
     maxAttempts: number;
+    sessionId: string | null;
   } | null;
 }
 
@@ -37,8 +38,8 @@ export default function Play() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const levels = [
-    { id: 1, name: "Characters", description: "50 random characters" },
-    { id: 2, name: "Words", description: "50-character word sequence" },
+    { id: 1, name: "Letters", description: "50 random letters" },
+    { id: 2, name: "Words", description: "Words totaling 50 letters" },
   ];
 
   const hasActiveEval = evalStatus?.hasActiveEvaluation === true && evalStatus.evaluation !== null;
@@ -148,7 +149,8 @@ export default function Play() {
   const startSession = (overrideLevel?: number) => {
     const targetLevel = overrideLevel || level;
     const targetType = hasActiveEval ? "evaluated" : sessionType;
-    navigate(`/student/play/session?type=${targetType}&level=${targetLevel}`);
+    const evalSessionId = hasActiveEval && evalStatus?.evaluation?.sessionId ? `&sessionId=${evalStatus.evaluation.sessionId}` : "";
+    navigate(`/student/play/session?type=${targetType}&level=${targetLevel}${evalSessionId}`);
   };
 
   const formatCountdown = (seconds: number) => {
@@ -190,7 +192,7 @@ export default function Play() {
             <Logo />
           </div>
 
-          {/* Evaluation Banner */}
+          {/* Activity Banner */}
           {hasActiveEval && (
             <PixelCard variant="red" className="text-white mb-4 bg-red-900/60 border-[3px] border-red-400 backdrop-blur-sm">
               <div className="flex items-center justify-between">
@@ -198,10 +200,10 @@ export default function Play() {
                   <Lock size={20} />
                   <div>
                     <p className="font-pixel text-sm">
-                      Active Evaluation — {evalStatus!.evaluation!.classroomName}
+                      Active Activity — {evalStatus!.evaluation!.classroomName}
                     </p>
                     <p className="font-pixel text-[10px] opacity-80">
-                      Level: {evalLevel!.charAt(0).toUpperCase() + evalLevel!.slice(1)} | Max {maxAttempts} attempts
+                      Level: {evalLevel === "characters" ? "Letters" : evalLevel!.charAt(0).toUpperCase() + evalLevel!.slice(1)} | Max {maxAttempts} attempts
                     </p>
                   </div>
                 </div>
@@ -224,33 +226,45 @@ export default function Play() {
               <h2 className="font-pixel text-xl mb-6">Start Session</h2>
 
               <div className="space-y-6">
-                {/* Session Type */}
+                {/* Session Type Toggle */}
                 <div>
                   <label className="block font-pixel text-xs mb-3">Session Type</label>
-                  <div className="flex gap-2">
-                    <PixelButton
-                      variant={sessionType === "practice" ? "accent" : "primary"}
+                  <div
+                    className={`relative flex items-center w-full h-10 rounded-lg border-2 overflow-hidden ${
+                      hasActiveEval ? "opacity-60 pointer-events-none" : ""
+                    }`}
+                    style={{ borderColor: "rgba(255,255,255,0.3)" }}
+                  >
+                    {/* Sliding highlight */}
+                    <div
+                      className="absolute top-0 bottom-0 w-1/2 bg-accent rounded-md transition-transform duration-200"
+                      style={{
+                        transform: sessionType === "evaluated" ? "translateX(100%)" : "translateX(0%)",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 transition-colors ${
+                        sessionType === "practice" ? "text-black" : "text-white/70"
+                      }`}
                       onClick={() => { if (!hasActiveEval) setSessionType("practice"); }}
-                      className="flex-1"
-                      disabled={hasActiveEval}
                     >
                       Practice
-                    </PixelButton>
-                    <PixelButton
-                      variant={sessionType === "evaluated" ? "accent" : "primary"}
-                      onClick={() => { if (!hasActiveEval) setSessionType("evaluated"); }}
-                      className="flex-1"
-                      disabled={!hasActiveEval && true}
+                    </button>
+                    <button
+                      type="button"
+                      className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 flex items-center justify-center gap-1 transition-colors ${
+                        sessionType === "evaluated" ? "text-black" : "text-white/70"
+                      }`}
+                      onClick={() => { if (!hasActiveEval && hasActiveEval) setSessionType("evaluated"); }}
                     >
-                      <span className="flex items-center justify-center gap-1">
-                        Evaluated
-                        {!hasActiveEval && <Lock size={12} />}
-                      </span>
-                    </PixelButton>
+                      Activity / Graded
+                      {!hasActiveEval && <Lock size={10} />}
+                    </button>
                   </div>
                   <p className="font-pixel text-[10px] mt-2 opacity-90">
                     {hasActiveEval
-                      ? "Locked to Evaluated — teacher evaluation is active"
+                      ? "Locked to Activity / Graded — teacher activity is active"
                       : sessionType === "practice"
                         ? "Not graded, perfect for drills"
                         : "Requires teacher activation"}
@@ -279,7 +293,7 @@ export default function Play() {
                   </div>
                 )}
 
-                {/* Evaluation Start Buttons + Life Bars */}
+                {/* Activity Start Buttons + Life Bars */}
                 {hasActiveEval ? (
                   <div className="space-y-3">
                     {evalLevels.map((lvl) => {
@@ -287,7 +301,7 @@ export default function Play() {
                       const remaining = maxAttempts - attempts;
                       const exhausted = attempts >= maxAttempts;
                       const expired = proctorTimeLeft <= 0;
-                      const label = lvl === 1 ? "Characters" : "Words";
+                      const label = lvl === 1 ? "Letters" : "Words";
                       return (
                         <div
                           key={lvl}
@@ -337,13 +351,13 @@ export default function Play() {
               </div>
             </PixelCard>
 
-            {/* 🔸 Last Session Performance */}
+            {/* 🔸 Latest Graded Performance */}
             <PixelCard
               variant="purple"
               className="text-white bg-black/60 border-[3px] border-purple-400 backdrop-blur-sm"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="font-pixel text-xl">Last Session Performance</h2>
+                <h2 className="font-pixel text-xl">Latest Graded Performance</h2>
                 <button
                   onClick={fetchResults}
                   disabled={isLoading}
@@ -484,10 +498,10 @@ export default function Play() {
             </PixelCard>
           </div>
 
-          {/* 🔸 Recent Sessions History */}
+          {/* 🔸 Recent Graded Sessions History */}
           <PixelCard className="bg-black/60 border-[3px] border-yellow-300 backdrop-blur-sm">
             <h2 className="font-pixel text-xl mb-6 text-yellow-200">
-              Recent Sessions
+              Recent Graded Sessions
             </h2>
             {history.length === 0 ? (
               <p className="font-pixel text-sm text-gray-400 text-center py-8">
@@ -502,7 +516,7 @@ export default function Play() {
                       className="pixel-border p-4 bg-black/50 flex items-center justify-between text-white border border-yellow-300 rounded-md"
                     >
                       <div>
-                        <p className="font-pixel text-sm">{session.level === 1 ? "Characters" : session.level === 2 ? "Words" : `Level ${session.level}`}</p>
+                        <p className="font-pixel text-sm">{session.level === 1 ? "Letters" : session.level === 2 ? "Words" : `Level ${session.level}`}</p>
                         <p className="font-pixel text-xs opacity-80">
                           {new Date(session.date).toISOString().split("T")[0]}
                         </p>

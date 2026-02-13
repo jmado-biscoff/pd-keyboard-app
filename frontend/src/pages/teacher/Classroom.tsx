@@ -20,6 +20,8 @@ import {
 import { toast } from "sonner";
 import StudentAnalyticsModal from "@/components/teacher/StudentAnalyticsModal";
 import bgVideo from "@/assets/b11.mp4";
+import { resolveProfileImage } from "@/utils/profileAssets";
+import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
 export default function Classroom() {
   const navigate = useNavigate();
@@ -148,7 +150,7 @@ export default function Classroom() {
       );
       const data = await res.json();
       if (res.ok) {
-        toast.success(activate ? "Evaluation activated!" : "Evaluation deactivated");
+        toast.success(activate ? "Activity activated!" : "Activity deactivated");
         setEvalSettingsMap((prev) => ({
           ...prev,
           [classroomId]: {
@@ -157,8 +159,8 @@ export default function Classroom() {
             activatedAt: data.activeEvaluation.activatedAt,
           },
         }));
-      } else toast.error(data.message || "Failed to toggle evaluation");
-    } catch { toast.error("Error toggling evaluation"); }
+      } else toast.error(data.message || "Failed to toggle activity");
+    } catch { toast.error("Error toggling activity"); }
   };
 
   const formatCountdown = (seconds: number) => {
@@ -381,7 +383,7 @@ export default function Classroom() {
                     onClick={() => toggleExpand(cls._id)}
                     className="hover:scale-110 transition-transform"
                   >
-                    <Users size={16} />
+                    {expanded === cls._id ? "Hide Students" : "Show Students"}
                   </PixelButton>
                   <PixelButton
                     variant="red"
@@ -474,9 +476,11 @@ export default function Classroom() {
                               }
                             >
                               <div className="flex items-center gap-2">
-                                <span className="text-lg">
-                                  {["🦁", "🐯", "🐻", "🦊", "🐺"][idx % 5]}
-                                </span>
+                                <img
+                                  src={resolveProfileImage(student.profilePicture) || fallbackProfilePic}
+                                  alt="Avatar"
+                                  className="w-8 h-8 rounded-md border border-white/20 object-cover image-render-pixel"
+                                />
                                 <span>{student.name || "Unnamed Student"}</span>
                               </div>
                               <div className="flex items-center gap-2">
@@ -494,10 +498,10 @@ export default function Classroom() {
                         </p>
                       )}
 
-                      {/* Evaluation Settings Panel */}
+                      {/* Activity Settings Panel */}
                       <div className="mt-6 border-t border-white/20 pt-4">
                         <h3 className="font-pixel text-sm mb-3 flex items-center gap-2">
-                          <Settings size={16} /> Evaluation Settings
+                          <Settings size={16} /> Activity Settings
                         </h3>
 
                         {/* Level Selector */}
@@ -517,37 +521,39 @@ export default function Classroom() {
                                 }
                                 disabled={evalSettingsMap[cls._id]?.isActive}
                               >
-                                {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                                {lvl === "characters" ? "Letters" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
                               </PixelButton>
                             ))}
                           </div>
                         </div>
 
-                        {/* Proctor Timer Slider */}
+                        {/* Session Open Duration */}
                         <div className="mb-3">
                           <p className="font-pixel text-[10px] opacity-70 mb-2">
                             <Clock size={12} className="inline mr-1" />
-                            SESSION LENGTH: {evalSettingsMap[cls._id]?.proctorTimerMinutes || 30} MINUTES
+                            SESSION OPEN DURATION:
                           </p>
-                          <input
-                            type="range"
-                            min={5}
-                            max={60}
-                            step={1}
-                            value={evalSettingsMap[cls._id]?.proctorTimerMinutes || 30}
-                            onChange={(e) => {
-                              setEvalSettingsMap((prev) => ({
-                                ...prev,
-                                [cls._id]: { ...prev[cls._id], proctorTimerMinutes: Number(e.target.value) },
-                              }));
-                            }}
-                            disabled={evalSettingsMap[cls._id]?.isActive}
-                            className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-white/20 accent-orange-400 disabled:opacity-50"
-                          />
-                          <div className="flex justify-between font-pixel text-[9px] opacity-50 mt-1">
-                            <span>5 min</span>
-                            <span>60 min</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={5}
+                              max={60}
+                              value={evalSettingsMap[cls._id]?.proctorTimerMinutes || 30}
+                              onChange={(e) => {
+                                const val = Math.min(60, Math.max(5, Number(e.target.value) || 5));
+                                setEvalSettingsMap((prev) => ({
+                                  ...prev,
+                                  [cls._id]: { ...prev[cls._id], proctorTimerMinutes: val },
+                                }));
+                              }}
+                              disabled={evalSettingsMap[cls._id]?.isActive}
+                              className="w-20 px-2 py-1 rounded-md font-pixel text-sm text-black bg-white/90 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <span className="font-pixel text-xs opacity-70">minutes</span>
                           </div>
+                          <p className="font-pixel text-[9px] opacity-50 mt-1">
+                            Min: 5 minutes | Max: 60 minutes
+                          </p>
                         </div>
 
                         {/* Activate/Deactivate Toggle */}
@@ -558,7 +564,7 @@ export default function Classroom() {
                           >
                             {evalSettingsMap[cls._id]?.isActive
                               ? "Deactivate"
-                              : "Activate Evaluation"}
+                              : "Activate Activity"}
                           </PixelButton>
 
                           {evalSettingsMap[cls._id]?.isActive && evalCountdowns[cls._id] !== undefined && (

@@ -5,7 +5,7 @@ import path from "path";
 const router = express.Router();
 
 // ============================================================
-// 🔹 Load Text Data (Levels 1–2)
+// Load Text Data (Levels 1–2)
 // ============================================================
 
 const dataDir = path.join(__dirname, "../../data");
@@ -30,15 +30,15 @@ function loadFile(filename: string, separator: string | RegExp = "\n") {
   }
 }
 
-// ✅ Load data files
+// Load data files
 const letterList = loadFile("letters.txt");
 const wordList = loadFile("words.txt");
 
 // ============================================================
-// 🔹 Helper Functions
+// Helper Functions
 // ============================================================
 
-// Generate 50 random characters (can repeat consecutively)
+// Generate 50 random letters (can repeat consecutively)
 const generate50RandomChars = (arr: string[]) => {
   if (arr.length === 0) return "";
   let result = "";
@@ -49,29 +49,24 @@ const generate50RandomChars = (arr: string[]) => {
   return result;
 };
 
-// Generate random words totaling exactly 50 characters (no word repeats)
-const generate50CharWords = (arr: string[]) => {
+// Generate random words containing exactly 50 letters (excluding spaces)
+const generate50LetterWords = (arr: string[]): string => {
   if (arr.length === 0) return "";
 
-  const availableWords = [...arr]; // Copy to track unused words
+  const availableWords = [...arr];
   const selectedWords: string[] = [];
-  let currentLength = 0;
+  let letterCount = 0;
 
-  // Keep trying to build a 50-character string
-  while (currentLength < 50 && availableWords.length > 0) {
-    // Calculate remaining space
-    const remaining = 50 - currentLength;
+  while (letterCount < 50 && availableWords.length > 0) {
+    const remaining = 50 - letterCount;
 
-    // If we have at least one word selected, account for the space separator
-    const spaceForNextWord = selectedWords.length > 0 ? remaining - 1 : remaining;
-
-    // Find words that would fit in the remaining space
-    const fittingWords = availableWords.filter(word => word.length <= spaceForNextWord);
+    // Find words that fit within the remaining letter count
+    const fittingWords = availableWords.filter(word => word.length <= remaining);
 
     if (fittingWords.length === 0) {
-      // No words fit perfectly, restart the algorithm
+      // No words fit — restart
       selectedWords.length = 0;
-      currentLength = 0;
+      letterCount = 0;
       availableWords.length = 0;
       availableWords.push(...arr);
       continue;
@@ -81,29 +76,25 @@ const generate50CharWords = (arr: string[]) => {
     const randomIndex = Math.floor(Math.random() * fittingWords.length);
     const selectedWord = fittingWords[randomIndex];
 
-    // Add word to result
     selectedWords.push(selectedWord);
-    currentLength += selectedWord.length + (selectedWords.length > 1 ? 1 : 0); // +1 for space
+    letterCount += selectedWord.length;
 
-    // Remove selected word from available pool
+    // Remove selected word from available pool (no repeats)
     const wordIndex = availableWords.indexOf(selectedWord);
     availableWords.splice(wordIndex, 1);
   }
 
-  // Join with spaces and verify length
-  const result = selectedWords.join(" ");
-
-  // If we hit exactly 50 characters, return it
-  if (result.length === 50) {
-    return result;
+  // Verify exactly 50 letters
+  if (letterCount === 50) {
+    return selectedWords.join(" ");
   }
 
-  // Otherwise, try again recursively (rare case)
-  return generate50CharWords(arr);
+  // Retry if not exact (rare case)
+  return generate50LetterWords(arr);
 };
 
 // ============================================================
-// 🔹 API ROUTE
+// API ROUTE
 // ============================================================
 
 router.get("/level/:id", (req: Request, res: Response) => {
@@ -112,14 +103,14 @@ router.get("/level/:id", (req: Request, res: Response) => {
 
   switch (id) {
     case "1":
-      // 🔹 Level 1: 50 random characters (can repeat consecutively)
+      // Level 1: 50 random letters (can repeat consecutively)
       const randomChars = generate50RandomChars(letterList);
       data = [randomChars];
       break;
 
     case "2":
-      // 🔹 Level 2: Random words totaling exactly 50 characters (no word repeats)
-      const randomWords = generate50CharWords(wordList);
+      // Level 2: Random words containing exactly 50 letters (spaces are extra)
+      const randomWords = generate50LetterWords(wordList);
       data = [randomWords];
       break;
 
@@ -131,7 +122,7 @@ router.get("/level/:id", (req: Request, res: Response) => {
 });
 
 // ============================================================
-// 🔹 Export
+// Export
 // ============================================================
 
 export default router;

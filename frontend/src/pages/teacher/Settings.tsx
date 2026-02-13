@@ -4,11 +4,69 @@ import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 import bgVideo from "@/assets/b12.mp4";
+import {
+  resolveProfileImage,
+  getProfilesForRole,
+} from "@/utils/profileAssets";
+import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
 export default function TeacherSettings() {
   const navigate = useNavigate();
   const userName = localStorage.getItem("userName") || "Teacher";
+  const [profileKey, setProfileKey] = useState(
+    localStorage.getItem("profilePicture") || ""
+  );
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [tempSelectedProfile, setTempSelectedProfile] = useState(profileKey);
+
+  const profilePic = resolveProfileImage(profileKey) || fallbackProfilePic;
+  const availableProfiles = getProfilesForRole("teacher");
+
+  const handleAvatarSelect = async (key: string) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    try {
+      const API_URL =
+        import.meta.env.VITE_API_URL || "http://localhost:5000/api/auth";
+      const res = await fetch(`${API_URL}/update-profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ profilePicture: key }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setProfileKey(key);
+        localStorage.setItem("profilePicture", key);
+        setShowAvatarModal(false);
+        toast.success("Avatar updated!");
+      } else {
+        toast.error(data.message || "Failed to update avatar");
+      }
+    } catch {
+      toast.error("Error updating avatar");
+    }
+  };
+
+  const openAvatarModal = () => {
+    setTempSelectedProfile(profileKey);
+    setShowAvatarModal(true);
+  };
+
+  const closeAvatarModal = () => {
+    setTempSelectedProfile(profileKey);
+    setShowAvatarModal(false);
+  };
 
   const handleLogout = () => {
     localStorage.clear();
@@ -44,11 +102,23 @@ export default function TeacherSettings() {
             <PixelCard>
               <h2 className="font-pixel text-xl mb-4">Profile</h2>
               <div className="flex items-center gap-4">
-                <div className="text-6xl">👨‍🏫</div>
+                <img
+                  src={profilePic}
+                  alt="Profile"
+                  className="h-16 w-16 rounded-md border-2 border-black object-cover image-render-pixel"
+                />
                 <div>
                   <p className="font-pixel text-sm text-muted-foreground">Teacher Name</p>
                   <p className="font-pixel text-lg">{userName}</p>
                 </div>
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={openAvatarModal}
+                  className="ml-auto"
+                >
+                  Edit Avatar
+                </PixelButton>
               </div>
             </PixelCard>
 
@@ -67,6 +137,47 @@ export default function TeacherSettings() {
           </div>
         </div>
       </div>
+
+      {/* Avatar Selection Modal */}
+      {showAvatarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <PixelCard className="max-w-lg w-full mx-4">
+            <h2 className="font-pixel text-xl mb-6 text-center">
+              Choose Your Avatar
+            </h2>
+            <div className="grid grid-cols-3 sm:grid-cols-3 gap-4 mb-6">
+              {availableProfiles.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setTempSelectedProfile(p.key)}
+                  className={`rounded-md border-3 overflow-hidden transition-transform hover:scale-105 ${
+                    tempSelectedProfile === p.key
+                      ? "border-accent ring-2 ring-accent scale-105"
+                      : "border-black"
+                  }`}
+                >
+                  <img
+                    src={p.src}
+                    alt={p.key}
+                    className="w-full aspect-square object-cover image-render-pixel"
+                  />
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <PixelButton variant="secondary" onClick={closeAvatarModal}>
+                Cancel
+              </PixelButton>
+              <PixelButton
+                variant="accent"
+                onClick={() => handleAvatarSelect(tempSelectedProfile)}
+              >
+                Save Changes
+              </PixelButton>
+            </div>
+          </PixelCard>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@
 
 interface VirtualKeyboardProps {
   activeKeys: { [key: string]: string };
+  isCalibrating?: boolean;
 }
 
 const keyboardLayout = [
@@ -57,7 +58,9 @@ const mapFingerToType = (finger: string): string => {
   return "unknown";
 };
 
-export const VirtualKeyboard = ({ activeKeys }: VirtualKeyboardProps) => {
+export const VirtualKeyboard = ({ activeKeys, isCalibrating }: VirtualKeyboardProps) => {
+  // During calibration, ignore all active keys to prevent false green highlights
+  const effectiveKeys = isCalibrating ? {} : activeKeys;
   return (
     <div className="flex flex-col items-center">
       <div className="font-pixel text-[8px] uppercase tracking-widest text-muted-foreground/60 mb-1.5">
@@ -66,8 +69,8 @@ export const VirtualKeyboard = ({ activeKeys }: VirtualKeyboardProps) => {
         {keyboardLayout.map((row, rowIdx) => (
           <div key={rowIdx} className="flex gap-2 justify-center">
             {row.map((key) => {
-              const keyState = activeKeys[key] || "";
-              const isActive = !!activeKeys[key];
+              const keyState = effectiveKeys[key] || "";
+              const isActive = !!effectiveKeys[key];
 
               // ============================================================
               // BINARY COLOR LOGIC: GREEN for perfect, RED for any mistake

@@ -3,10 +3,14 @@ import { Logo } from "@/components/Logo";
 import { PixelCard } from "@/components/PixelCard";
 import { Users, Settings } from "lucide-react";
 import bgVideo from "@/assets/b10.mp4";
+import { resolveProfileImage } from "@/utils/profileAssets";
+import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const userName = localStorage.getItem("userName") || "Teacher";
+  const profileKey = localStorage.getItem("profilePicture") || "";
+  const profilePic = resolveProfileImage(profileKey) || fallbackProfilePic;
 
   const menuItems = [
     {
@@ -44,7 +48,11 @@ export default function TeacherDashboard() {
           <div className="flex justify-between items-center mb-12">
             <Logo />
             <div className="flex items-center gap-3">
-              <div className="text-4xl">👨‍🏫</div>
+              <img
+                src={profilePic}
+                alt="Profile"
+                className="h-12 w-12 rounded-md border-2 border-black object-cover image-render-pixel"
+              />
               <div>
                 <p className="font-pixel text-xs text-black">Teacher</p>
                 <p className="font-pixel text-sm">{userName}</p>

@@ -6,6 +6,7 @@ export interface IActiveEvaluation {
   proctorTimerMinutes: number;
   activatedAt: Date | null;
   maxAttempts: number;
+  sessionId: string | null;
 }
 
 export interface IClassroom extends Document {
@@ -29,6 +30,7 @@ const ClassroomSchema = new Schema<IClassroom>({
     proctorTimerMinutes: { type: Number, min: 5, max: 60, default: 30 },
     activatedAt: { type: Date, default: null },
     maxAttempts: { type: Number, default: 3 },
+    sessionId: { type: String, default: null },
   },
 });
 

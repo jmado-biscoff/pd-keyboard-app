@@ -7,6 +7,7 @@ import { PixelInput } from "@/components/PixelInput";
 import { Logo } from "@/components/Logo";
 import { toast } from "sonner";
 import bgGif from "@/assets/bg.gif";
+import { getRandomProfile } from "@/utils/profileAssets";
 
 type UserType = "student" | "teacher";
 type AuthMode = "login" | "signup";
@@ -64,6 +65,7 @@ export default function Auth() {
               email: formData.email,
               password: formData.password,
               role: userType,
+              profilePicture: getRandomProfile(userType),
             }
           : {
               email: formData.email,
@@ -88,6 +90,10 @@ export default function Auth() {
       if (data?.user) {
         localStorage.setItem("userName", data.user.name || formData.name);
         localStorage.setItem("userType", data.user.role || userType);
+        localStorage.setItem(
+          "profilePicture",
+          data.user.profilePicture || ""
+        );
       }
 
       const role = data?.user?.role || userType;

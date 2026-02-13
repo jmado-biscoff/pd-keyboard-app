@@ -23,7 +23,8 @@ router.post("/", async (req: Request, res: Response) => {
       skippedCount,
       compositeScore,
       netWpm,
-      errorRate
+      errorRate,
+      sessionId
     } = req.body;
 
     if (!level || wpm === undefined || accuracy === undefined) {
@@ -43,7 +44,8 @@ router.post("/", async (req: Request, res: Response) => {
       skippedCount: skippedCount || 0,
       compositeScore: compositeScore || 0,
       netWpm: netWpm || 0,
-      errorRate: errorRate || 0
+      errorRate: errorRate || 0,
+      ...(sessionId ? { sessionId } : {}),
     });
 
     await result.save();

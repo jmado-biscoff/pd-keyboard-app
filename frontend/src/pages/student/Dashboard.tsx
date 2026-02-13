@@ -8,12 +8,15 @@ import { Clock } from "lucide-react";
 import learnIcon from "@/assets/file-logo.png";
 import settingsIcon from "@/assets/settings-logo.png";
 import playIcon from "@/assets/keyboard-logo.png";
-import profilePic from "@/assets/cat-profile.jpg";
+import { resolveProfileImage } from "@/utils/profileAssets";
+import fallbackProfilePic from "@/assets/cat-profile.jpg";
 import bgVideo from "@/assets/b4.mp4";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const userName = localStorage.getItem("userName") || "Student";
+  const profileKey = localStorage.getItem("profilePicture") || "";
+  const profilePic = resolveProfileImage(profileKey) || fallbackProfilePic;
   const [classrooms, setClassrooms] = useState<any[]>([]);
   const [activeEvalName, setActiveEvalName] = useState<string | null>(null);
   const [evalRemaining, setEvalRemaining] = useState(0);
@@ -117,7 +120,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Active Evaluation Banner */}
+          {/* Active Activity / Graded Banner */}
           {activeEvalName && evalRemaining > 0 && (
             <PixelCard variant="red" className="text-white mb-6">
               <div className="flex items-center justify-between">
@@ -125,7 +128,7 @@ export default function StudentDashboard() {
                   <Clock size={20} />
                   <div>
                     <p className="font-pixel text-sm">
-                      Active Evaluation — {activeEvalName}
+                      Active Activity — {activeEvalName}
                     </p>
                     <p className="font-pixel text-[10px] opacity-80">
                       {Math.ceil(evalRemaining / 60)} minutes remaining
@@ -133,7 +136,7 @@ export default function StudentDashboard() {
                   </div>
                 </div>
                 <PixelButton variant="accent" size="sm" onClick={() => navigate("/student/play")}>
-                  Go to Evaluation
+                  Go to Activity
                 </PixelButton>
               </div>
             </PixelCard>

@@ -150,6 +150,7 @@ studentRoutes.get(
               expiresAt: new Date(expiresAt).toISOString(),
               remainingSeconds,
               maxAttempts: eval_.maxAttempts,
+              sessionId: eval_.sessionId || null,
             },
           });
         }

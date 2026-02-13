@@ -7,6 +7,7 @@ import { TextPrompt } from "@/components/TextPrompt";
 import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { ErrorQueue } from "@/components/ErrorQueue";
+import { CompositeScoreLegend } from "@/components/CompositeScoreLegend";
 import { CalibrationOverlay } from "@/components/CalibrationOverlay";
 import { DetectionErrorOverlay } from "@/components/DetectionErrorOverlay";
 import { SessionComplete } from "@/components/SessionComplete";
@@ -41,6 +42,7 @@ export default function PlaySession() {
   const [searchParams] = useSearchParams();
   const sessionType = searchParams.get("type") || "practice";
   const level = parseInt(searchParams.get("level") || "1");
+  const sessionId = searchParams.get("sessionId") || undefined;
 
   const [words, setWords] = useState<string[]>([]);
   const [typedWords, setTypedWords] = useState<string[]>([]);
@@ -59,7 +61,9 @@ export default function PlaySession() {
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [frame, setFrame] = useState<string | null>(null);
   const [calibrationProgress, setCalibrationProgress] = useState({ detected: 0, required: 26 }); // ✅ 26-key model
+  const [calibratedKeys, setCalibratedKeys] = useState<string[]>([]);
   const calibrationDoneRef = useRef(false);
+  const [replayIndex, setReplayIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
   const correctCountRef = useRef(0);
@@ -443,6 +447,9 @@ export default function PlaySession() {
               detected: data.detected,
               required: data.required,
             });
+            if (Array.isArray(data.detected_keys)) {
+              setCalibratedKeys(data.detected_keys.map((k: string) => k.toUpperCase()));
+            }
             break;
           case "calibration_done":
             if (!calibrationDoneRef.current) {
@@ -718,7 +725,9 @@ export default function PlaySession() {
 
               setCharFeedback((prev) => ({
                 ...prev,
-                [globalCursorPos]: isCorrectFinal ? "correct" : "incorrect",
+                [globalCursorPos]: isCorrectFinal
+                  ? "correct"
+                  : (key === expectedKey ? "wrong_finger" : "incorrect"),
               }));
 
               // ────────────────────────────────────────────────────────────
@@ -902,6 +911,8 @@ export default function PlaySession() {
       // This ensures the browser immediately hides old green boxes
       setFrame(null);
       setCalibrationProgress({ detected: 0, required: 26 }); // ✅ 26-key model
+      setActiveKeys({}); // Clear keyboard highlights during calibration
+      setCalibratedKeys([]); // Reset calibrated keys list
 
       // Then reset all other state
       setDetectionError(null);
@@ -982,6 +993,8 @@ export default function PlaySession() {
       // Instant UI feedback - wipe all calibration data immediately
       setFrame(null);
       setCalibrationProgress({ detected: 0, required: 26 });
+      setActiveKeys({}); // Clear keyboard highlights during calibration
+      setCalibratedKeys([]); // Reset calibrated keys list
       setCalibrationDone(false);
       setShowCalibrationComplete(false);
       setIsCalibrating(true);
@@ -1158,6 +1171,7 @@ export default function PlaySession() {
             compositeScore: dbMetrics.compositeScore,
             netWpm: dbMetrics.netWpm,
             errorRate: dbMetrics.errorRate,
+            ...(sessionId ? { sessionId } : {}),
           }),
         });
         console.log("✅ Auto-saved to MongoDB immediately on session end");
@@ -1212,6 +1226,7 @@ export default function PlaySession() {
         isCalibrating={isCalibrating}
         showCalibrationComplete={showCalibrationComplete}
         calibrationProgress={calibrationProgress}
+        calibratedKeys={calibratedKeys}
       />
 
       <DetectionErrorOverlay
@@ -1275,7 +1290,7 @@ export default function PlaySession() {
             <Logo />
           </div>
           <div className="font-pixel text-[9px] uppercase tracking-widest px-2.5 py-1 rounded-full border border-border/50 bg-card/60 text-muted-foreground">
-            {sessionType === "evaluated" ? "🏆 Graded" : "🎮 Practice"} · Level {level}
+            {sessionType === "evaluated" ? "🏆 Activity / Graded" : "🎮 Practice"} · Level {level}
           </div>
         </header>
 
@@ -1298,13 +1313,11 @@ export default function PlaySession() {
 
             {!isFinished ? (
               <>
-                <div>
-                  <VideoFeed
-                    detecting={detecting}
-                    calibrationDone={calibrationDone}
-                    baseUrl={BASE_URL}
-                  />
-                </div>
+                <VideoFeed
+                  detecting={detecting}
+                  calibrationDone={calibrationDone}
+                  baseUrl={BASE_URL}
+                />
 
                 <div className="w-full max-w-2xl relative">
                   <TextPrompt
@@ -1326,7 +1339,7 @@ export default function PlaySession() {
                   />
                 </div>
 
-                <VirtualKeyboard activeKeys={activeKeys} />
+                <VirtualKeyboard activeKeys={activeKeys} isCalibrating={isCalibrating} />
 
                 {/* Action Buttons */}
                 <div className="flex gap-2 mt-1">
@@ -1356,11 +1369,60 @@ export default function PlaySession() {
                 sessionHistory={sessionHistoryRef.current}
                 onFinish={handleFinish}
                 finalAnalysis={finalAnalysis}
+                replayIndex={replayIndex}
+                onReplayIndexChange={setReplayIndex}
               />
             )}
           </section>
 
-          <ErrorQueue errorQueue={errorQueue} />
+          {isFinished ? (
+            <div className="flex flex-col gap-4">
+              <CompositeScoreLegend currentGrade={finalAnalysis?.analysis?.letterGrade || ""} />
+
+              {/* Pressed vs Expected — driven by replay slider */}
+              {sessionHistoryRef.current.length > 0 && (() => {
+                const entry = sessionHistoryRef.current[replayIndex];
+                if (!entry) return null;
+                return (
+                  <div className="rounded-lg border border-border/40 bg-card/30 p-3 flex items-center justify-center gap-3">
+                    {/* Pressed Key */}
+                    <div className="flex flex-col items-center">
+                      <p className="font-pixel text-[7px] text-muted-foreground/60 uppercase tracking-wider mb-1">Pressed</p>
+                      {entry.status === "skipped" ? (
+                        <div className="w-12 h-12 bg-black border-2 border-white/20 rounded-lg flex items-center justify-center shadow-lg">
+                          <span className="font-pixel text-sm text-white/40">-</span>
+                        </div>
+                      ) : (
+                        <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center shadow-lg ${
+                          entry.status === "correct" ? "bg-green-500 border-green-600/50" :
+                          entry.status === "wrong_finger" ? "bg-orange-500 border-orange-600/50" :
+                          "bg-red-500 border-red-600/50"
+                        }`}>
+                          <span className="font-pixel text-xl text-white uppercase">
+                            {entry.char === " " ? "\u2423" : entry.char}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <span className="font-pixel text-sm text-muted-foreground/40">vs</span>
+
+                    {/* Expected Key */}
+                    <div className="flex flex-col items-center">
+                      <p className="font-pixel text-[7px] text-muted-foreground/60 uppercase tracking-wider mb-1">Expected</p>
+                      <div className="w-12 h-12 bg-green-500 border-2 border-green-600/50 rounded-lg flex items-center justify-center shadow-lg">
+                        <span className="font-pixel text-xl text-white uppercase">
+                          {entry.expected === " " ? "\u2423" : entry.expected}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <ErrorQueue errorQueue={errorQueue} />
+          )}
         </div>
       </div>
     </div>
