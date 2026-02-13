@@ -6,94 +6,84 @@ import { PixelCard } from "@/components/PixelCard";
 import { ArrowLeft, CheckCircle2, Lock } from "lucide-react";
 import bgVideo from "@/assets/b4.mp4";
 
+const modules = [
+  {
+    id: 1,
+    title: "Home Row Heroes",
+    description: "Master the foundation keys of touch typing.",
+    focusKeys: "A S D F J K L",
+  },
+  {
+    id: 2,
+    title: "Top Row Adventure",
+    description: "Reach up and conquer the top row.",
+    focusKeys: "Q W E R T Y U I O P",
+  },
+  {
+    id: 3,
+    title: "Bottom Row Explorer",
+    description: "Stretch down to complete the alphabet rows.",
+    focusKeys: "Z X C V B N M",
+  },
+  {
+    id: 4,
+    title: "Alphabet Mastery",
+    description: "Random letters from the entire keyboard.",
+    focusKeys: "A – Z",
+  },
+  {
+    id: 5,
+    title: "Word Builder",
+    description: "Type real words to build fluency.",
+    focusKeys: "Full Words",
+  },
+];
+
+const DEFAULT_PROGRESS: Record<number, { completed: boolean }> = {
+  1: { completed: false },
+  2: { completed: false },
+  3: { completed: false },
+  4: { completed: false },
+  5: { completed: false },
+};
+
 export default function Learn() {
   const navigate = useNavigate();
 
-  // 🔹 Initialize progress from localStorage or start fresh
-  const [progress, setProgress] = useState(() => {
+  const [progress] = useState(() => {
     const saved = localStorage.getItem("typingModuleProgress");
-    return saved
-      ? JSON.parse(saved)
-      : {
-          1: { completed: false },
-          2: { completed: false },
-          3: { completed: false },
-          4: { completed: false },
-          5: { completed: false },
-          6: { completed: false },
-        };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Migrate: if old 6-key progress, reset to 5-key
+        if (parsed[6] !== undefined) return { ...DEFAULT_PROGRESS };
+        return parsed;
+      } catch {
+        return { ...DEFAULT_PROGRESS };
+      }
+    }
+    return { ...DEFAULT_PROGRESS };
   });
 
-  // 🔹 Save progress on update
   useEffect(() => {
     localStorage.setItem("typingModuleProgress", JSON.stringify(progress));
   }, [progress]);
 
-  // 🔹 Modules configuration
-  const modules = [
-    {
-      id: 1,
-      title: "Home Row Keys",
-      description: "Learn ASDF JKL;",
-      path: "home-row",
-    },
-    {
-      id: 2,
-      title: "Top Row Keys",
-      description: "Master QWER UIOP",
-      path: "top-row",
-    },
-    {
-      id: 3,
-      title: "Bottom Row Keys",
-      description: "Practice ZXCV NM,.",
-      path: "bottom-row",
-    },
-    {
-      id: 4,
-      title: "Numbers Row",
-      description: "Learn 1234567890",
-      path: "numbers-row",
-    },
-    {
-      id: 5,
-      title: "Special Characters",
-      description: "Master !@#$%^&*()",
-      path: "special-characters",
-    },
-    {
-      id: 6,
-      title: "Full Keyboard",
-      description: "Complete mastery",
-      path: "full-keyboard",
-    },
-  ];
+  const dynamicModules = modules.map((module) => {
+    const prevId = module.id - 1;
+    const isUnlocked =
+      module.id === 1 || progress[prevId]?.completed === true;
+    const isCompleted = progress[module.id]?.completed === true;
+    return { ...module, unlocked: isUnlocked, completed: isCompleted };
+  });
 
-  // 🔹 Determine unlocks dynamically
-  const getModules = () => {
-    return modules.map((module) => {
-      const prevId = module.id - 1;
-      const isUnlocked =
-        module.id === 1 || progress[prevId]?.completed === true;
-      const isCompleted = progress[module.id]?.completed === true;
-      return {
-        ...module,
-        unlocked: isUnlocked,
-        completed: isCompleted,
-      };
-    });
-  };
-
-  const handleStartModule = (module) => {
+  const handleStartModule = (module: (typeof dynamicModules)[number]) => {
     if (!module.unlocked) return;
-    navigate(`/student/learn/${module.path}`);
+    navigate(`/student/learn/session?module=${module.id}`);
   };
-
-  const dynamicModules = getModules();
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* 🔹 Background Video */}
       <video
         autoPlay
         loop
@@ -104,7 +94,6 @@ export default function Learn() {
         <source src={bgVideo} type="video/mp4" />
       </video>
 
-      {/* 🔹 Page Content */}
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
@@ -135,7 +124,7 @@ export default function Learn() {
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-2">
                   <h3 className="font-pixel text-lg text-black">
                     {module.title}
                   </h3>
@@ -145,8 +134,14 @@ export default function Learn() {
                       size={24}
                     />
                   )}
-                  {!module.unlocked && <Lock className="text-black/60" size={24} />}
+                  {!module.unlocked && (
+                    <Lock className="text-black/60" size={24} />
+                  )}
                 </div>
+
+                <p className="font-pixel text-xs text-black/70 mb-1">
+                  {module.focusKeys}
+                </p>
 
                 <p className="font-pixel text-xs text-black mb-4">
                   {module.description}
@@ -165,7 +160,7 @@ export default function Learn() {
             ))}
           </div>
 
-          {/* Optional Developer Controls */}
+          {/* Reset Progress */}
           <div className="mt-12 text-center opacity-70">
             <PixelButton
               variant="secondary"

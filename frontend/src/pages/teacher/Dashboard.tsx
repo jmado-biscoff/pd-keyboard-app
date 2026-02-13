@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { PixelCard } from "@/components/PixelCard";
-import { Users, Settings } from "lucide-react";
 import bgVideo from "@/assets/b10.mp4";
+import classroomLogo from "@/assets/classroom.png";
+import settingsLogo from "@/assets/settings-logo.png";
 import { resolveProfileImage } from "@/utils/profileAssets";
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
@@ -15,14 +16,14 @@ export default function TeacherDashboard() {
   const menuItems = [
     {
       title: "Classroom",
-      icon: Users,
+      logo: classroomLogo,
       path: "/teacher/classroom",
       variant: "orange" as const,
       description: "Manage students",
     },
     {
       title: "Settings",
-      icon: Settings,
+      logo: settingsLogo,
       path: "/teacher/settings",
       variant: "purple" as const,
       description: "Account settings",
@@ -68,7 +69,7 @@ export default function TeacherDashboard() {
                 className="text-left transition-transform hover:scale-105 active:scale-95"
               >
                 <PixelCard variant={item.variant} className="h-full flex flex-col items-center justify-center gap-4 p-12 text-white">
-                  <item.icon size={80} strokeWidth={2.5} />
+                  <img src={item.logo} alt={item.title} className="w-20 h-20" />
                   <h2 className="font-pixel text-2xl">{item.title}</h2>
                   <p className="font-pixel text-xs opacity-90">{item.description}</p>
                 </PixelCard>

@@ -5,6 +5,7 @@ import { PixelCard } from "@/components/PixelCard";
 import { PixelInput } from "@/components/PixelInput";
 import { ArrowLeft, LogOut, Users } from "lucide-react";
 import { toast } from "sonner";
+import bgGif from "@/assets/b13.gif";
 import { useState } from "react";
 import {
   resolveProfileImage,
@@ -117,7 +118,15 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen p-8">
+    <div className="relative min-h-screen overflow-hidden">
+      {/* Background GIF */}
+      <img
+        src={bgGif}
+        alt="Background"
+        className="absolute top-0 left-0 w-full h-full object-cover -z-10"
+      />
+
+      <div className="relative z-10 p-8 bg-black/20 min-h-screen">
       <div className="max-w-4xl mx-auto">
         {/* Back Button + Logo */}
         <div className="flex items-center gap-4 mb-12">
@@ -193,6 +202,7 @@ export default function Settings() {
             </PixelButton>
           </PixelCard>
         </div>
+      </div>
       </div>
 
       {/* Avatar Selection Modal */}

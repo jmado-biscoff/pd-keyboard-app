@@ -15,7 +15,9 @@
       "Bash(nslookup:*)",
       "Bash(sc query:*)",
       "Bash(findstr:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(ls -la \"e:\\\\prototype\\\\pd-keyboard-app\\\\frontend\\\\src\\\\pages\\\\student\"\" 2>&1 || echo \"Directory not found \")",
+      "Bash(dir:*)"
     ]
   }
 }

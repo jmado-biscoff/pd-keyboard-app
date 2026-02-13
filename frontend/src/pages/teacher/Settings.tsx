@@ -5,7 +5,7 @@ import { PixelCard } from "@/components/PixelCard";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
-import bgVideo from "@/assets/b12.mp4";
+import bgGif from "@/assets/b13.gif";
 import {
   resolveProfileImage,
   getProfilesForRole,
@@ -76,16 +76,12 @@ export default function TeacherSettings() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
+      {/* Background GIF */}
+      <img
+        src={bgGif}
+        alt="Background"
         className="absolute top-0 left-0 w-full h-full object-cover -z-10"
-      >
-        <source src={bgVideo} type="video/mp4" />
-      </video>
+      />
 
       {/* Page Content */}
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">

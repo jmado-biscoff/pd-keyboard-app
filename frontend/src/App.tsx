@@ -10,12 +10,7 @@ import Auth from "./pages/Auth";
 // 🔹 Student Pages
 import StudentDashboard from "./pages/student/Dashboard";
 import Learn from "./pages/student/Learn";
-import HomeRowModule from "./pages/student/HomeRowModule";
-import TopRowModule from "./pages/student/TopRowModule";
-import BottomRowModule from "./pages/student/BottomRowModule";
-import NumbersRowModule from "./pages/student/NumberRowModule";
-import SpecialCharactersModule from "./pages/student/SpecialCharactersModule";
-import FullKeyboardModule from "./pages/student/FullKeyboardModule";
+import LearnSession from "./pages/student/LearnSession";
 
 import Play from "./pages/student/Play";
 import PlaySession from "./pages/student/PlaySession";
@@ -47,13 +42,8 @@ const App = () => (
           <Route path="/student/dashboard" element={<StudentDashboard />} />
           <Route path="/student/learn" element={<Learn />} />
 
-          {/* 🔸 Typing Modules */}
-          <Route path="/student/learn/home-row" element={<HomeRowModule />} />
-          <Route path="/student/learn/top-row" element={<TopRowModule />} />
-          <Route path="/student/learn/bottom-row" element={<BottomRowModule />} />
-          <Route path="/student/learn/numbers-row" element={<NumbersRowModule />} />
-          <Route path="/student/learn/special-characters" element={<SpecialCharactersModule />} />
-          <Route path="/student/learn/full-keyboard" element={<FullKeyboardModule />} />
+          {/* 🔸 Learn Session (ML-detected modules) */}
+          <Route path="/student/learn/session" element={<LearnSession />} />
 
 
           {/* 🔸 Game / Practice */}

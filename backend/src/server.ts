@@ -13,6 +13,7 @@ import teacherRoutes from "./routes/teacherRoutes";
 import typingRoutes from "./routes/typingRoutes";
 import detectionRouter from "./routes/detectionRoutes";
 import resultsRoutes from "./routes/resultsRoutes";
+import learnRoutes from "./routes/learnRoutes";
 
 // Configuration
 const app: Application = express();
@@ -30,6 +31,7 @@ app.use("/api/teacher", teacherRoutes);
 app.use("/api/typing", typingRoutes);
 app.use("/api/detect", detectionRouter);
 app.use("/api/results", resultsRoutes);
+app.use("/api/learn", learnRoutes);
 app.use("/api/auth/teacher", teacherRoutes);
 app.use("/api/auth/student", studentRoutes);
 
