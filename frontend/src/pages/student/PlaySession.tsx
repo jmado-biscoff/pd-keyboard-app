@@ -22,6 +22,7 @@ import {
   getDetectionStatus,
   setExpectedKeys,
 } from "@/utils/typingHelpers";
+import { useAudio } from "@/contexts/AudioContext";
 import type {
   ErrorHistoryEntry,
   SessionReport,
@@ -43,6 +44,9 @@ export default function PlaySession() {
   const sessionType = searchParams.get("type") || "practice";
   const level = parseInt(searchParams.get("level") || "1");
   const sessionId = searchParams.get("sessionId") || undefined;
+
+  // Audio
+  const { playCorrectSound, playErrorSound, muteMusicTemporarily } = useAudio();
 
   const [words, setWords] = useState<string[]>([]);
   const [typedWords, setTypedWords] = useState<string[]>([]);
@@ -615,6 +619,7 @@ export default function PlaySession() {
               const detectedFinger = data.finger ? String(data.finger) : undefined;
 
               if (isCorrectFinal) {
+                playCorrectSound();
                 setCorrectCount((prev) => {
                   const next = prev + 1;
                   correctCountRef.current = next;
@@ -632,6 +637,7 @@ export default function PlaySession() {
                   finger: detectedFinger
                 }]);
               } else {
+                playErrorSound();
                 setIncorrectCount((prev) => {
                   const next = prev + 1;
                   incorrectCountRef.current = next;
@@ -1039,9 +1045,15 @@ export default function PlaySession() {
   };
 
   useEffect(() => {
+    // Mute background music during play session
+    muteMusicTemporarily(true);
+
     const start = async () => await handleStartDetection();
     start();
+
     return () => {
+      // Unmute background music when leaving
+      muteMusicTemporarily(false);
       void handleStopDetection();
       // Cleanup all timeouts
       if (calibrationTimeoutRef.current) {

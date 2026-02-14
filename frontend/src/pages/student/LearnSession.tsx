@@ -14,7 +14,8 @@ import {
   getKeyColor,
   getCorrectionTip,
 } from "@/utils/typingHelpers";
-import bgVideo from "@/assets/b4.mp4";
+import { useAudio } from "@/contexts/AudioContext";
+import bgVideo from "@/assets/bg2.mp4";
 
 const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
 
@@ -38,6 +39,9 @@ export default function LearnSession() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const moduleId = parseInt(searchParams.get("module") || "1");
+
+  // Audio
+  const { playCorrectSound, playErrorSound, muteMusicTemporarily } = useAudio();
 
   // Content
   const [drills, setDrills] = useState<string[]>([]);
@@ -205,60 +209,88 @@ export default function LearnSession() {
             if (lastEventRef.current === signature) return;
             lastEventRef.current = signature;
 
-            const expectedKey = data.expected_key ? String(data.expected_key).toUpperCase() : expectedChar;
             const mlCorrect = data.ml_label === "Correct";
-            const isCorrect = mlCorrect && key === expectedChar;
+            const keyCorrect = key === expectedChar;
 
-            // Update counts
-            if (isCorrect) {
-              correctCountRef.current++;
-              setCorrectCount(correctCountRef.current);
-              setLastTip(null);
-            } else {
-              incorrectCountRef.current++;
-              setIncorrectCount(incorrectCountRef.current);
-              setLastTip(getCorrectionTip(expectedChar));
-            }
+            // ✅ NEW: Only proceed if BOTH key AND finger are correct
+            const isFullyCorrect = mlCorrect && keyCorrect;
 
             // Visual feedback on VirtualKeyboard
             const color = getKeyColor(key, expectedChar, data.ml_label);
             setActiveKeys({ [key]: color });
             setTimeout(() => setActiveKeys({}), 300);
 
-            // Update char feedback for drill display
-            setCharFeedback((prev) => ({
-              ...prev,
-              [cIdx]: isCorrect ? "correct" : "incorrect",
-            }));
+            if (isFullyCorrect) {
+              // ✅ CORRECT: Update counts and advance
+              correctCountRef.current++;
+              setCorrectCount(correctCountRef.current);
+              setLastTip(null);
+              playCorrectSound();
 
-            // Advance character pointer
-            const nextCharIndex = cIdx + 1;
-            if (nextCharIndex >= currentDrill.length) {
-              // Drill complete — advance to next
-              const nextDrillIndex = dIdx + 1;
-              if (nextDrillIndex >= currentDrills.length) {
-                setModuleComplete(true);
+              // Update char feedback for drill display
+              setCharFeedback((prev) => ({
+                ...prev,
+                [cIdx]: "correct",
+              }));
+
+              // Advance character pointer
+              const nextCharIndex = cIdx + 1;
+              if (nextCharIndex >= currentDrill.length) {
+                // Drill complete — advance to next
+                const nextDrillIndex = dIdx + 1;
+                if (nextDrillIndex >= currentDrills.length) {
+                  setModuleComplete(true);
+                } else {
+                  currentDrillIndexRef.current = nextDrillIndex;
+                  currentCharIndexRef.current = 0;
+                  setCurrentDrillIndex(nextDrillIndex);
+                  setCurrentCharIndex(0);
+                  setCharFeedback({});
+                  setLastTip(null);
+
+                  // Update expected keys for new drill
+                  fetch(`${BASE_URL}/api/detect/set-expected`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      words: currentDrills.slice(nextDrillIndex),
+                      startIndex: 0,
+                    }),
+                  });
+                }
               } else {
-                currentDrillIndexRef.current = nextDrillIndex;
-                currentCharIndexRef.current = 0;
-                setCurrentDrillIndex(nextDrillIndex);
-                setCurrentCharIndex(0);
-                setCharFeedback({});
-                setLastTip(null);
-
-                // Update expected keys for new drill
-                fetch(`${BASE_URL}/api/detect/set-expected`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    words: currentDrills.slice(nextDrillIndex),
-                    startIndex: 0,
-                  }),
-                });
+                currentCharIndexRef.current = nextCharIndex;
+                setCurrentCharIndex(nextCharIndex);
               }
             } else {
-              currentCharIndexRef.current = nextCharIndex;
-              setCurrentCharIndex(nextCharIndex);
+              // ❌ INCORRECT: Do NOT advance, show feedback
+              incorrectCountRef.current++;
+              setIncorrectCount(incorrectCountRef.current);
+              playErrorSound();
+
+              // Show specific error message
+              if (!keyCorrect && !mlCorrect) {
+                setLastTip(`Wrong key AND wrong finger! Expected: ${expectedChar}. ${getCorrectionTip(expectedChar)}`);
+              } else if (!keyCorrect) {
+                setLastTip(`Wrong key! Expected: ${expectedChar}`);
+              } else if (!mlCorrect) {
+                setLastTip(`Wrong finger! ${getCorrectionTip(expectedChar)}`);
+              }
+
+              // Flash the incorrect character in red
+              setCharFeedback((prev) => ({
+                ...prev,
+                [cIdx]: "incorrect",
+              }));
+
+              // Clear the incorrect feedback after a short delay
+              setTimeout(() => {
+                setCharFeedback((prev) => {
+                  const updated = { ...prev };
+                  delete updated[cIdx];
+                  return updated;
+                });
+              }, 500);
             }
             break;
           }
@@ -361,9 +393,15 @@ export default function LearnSession() {
 
   // Auto-start detection on mount
   useEffect(() => {
+    // Mute background music during learn session
+    muteMusicTemporarily(true);
+
     const start = async () => await handleStartDetection();
     start();
+
     return () => {
+      // Unmute background music when leaving
+      muteMusicTemporarily(false);
       void handleStopDetection();
       if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current);
     };
@@ -383,10 +421,34 @@ export default function LearnSession() {
   }, [moduleComplete, detecting]);
 
   // Finish module
-  const handleFinish = () => {
+  const handleFinish = async () => {
+    const token = localStorage.getItem("token");
+
+    // Save to backend
+    if (token) {
+      try {
+        await fetch(`${BASE_URL}/api/student/learning-progress`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            moduleId,
+            completed: true,
+            accuracy: accuracyPercent,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to save progress to backend:", error);
+      }
+    }
+
+    // Also update localStorage as cache
     const saved = JSON.parse(localStorage.getItem("typingModuleProgress") || "{}");
-    saved[moduleId] = { completed: true };
+    saved[moduleId] = { completed: true, accuracy: accuracyPercent };
     localStorage.setItem("typingModuleProgress", JSON.stringify(saved));
+
     navigate("/student/learn");
   };
 
@@ -398,9 +460,9 @@ export default function LearnSession() {
   const accuracyPercent = totalChars > 0 ? Math.round((correctCount / totalChars) * 100) : 100;
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="min-h-screen flex items-start justify-center p-4 pt-6 relative">
       {/* Background */}
-      <video autoPlay loop muted playsInline className="absolute top-0 left-0 w-full h-full object-cover -z-10">
+      <video autoPlay loop muted playsInline className="fixed top-0 left-0 w-full h-full object-cover -z-10">
         <source src={bgVideo} type="video/mp4" />
       </video>
 
@@ -430,41 +492,71 @@ export default function LearnSession() {
         </div>
       )}
 
-      {/* Page Content */}
-      <div className="relative z-10 p-4 bg-black/20 min-h-screen">
-        <div className="max-w-[1200px] mx-auto">
+      {/* Main Content Card */}
+      <div className="w-full max-w-[1200px] rounded-xl border border-white/20 shadow-2xl bg-black/30 backdrop-blur-md overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 bg-black/40 backdrop-blur-sm shrink-0">
             <div className="flex items-center gap-3">
-              <PixelButton variant="secondary" onClick={() => { handleStopDetection(); navigate("/student/learn"); }}>
+              <PixelButton variant="secondary" size="sm" onClick={() => { handleStopDetection(); navigate("/student/learn"); }}>
                 <ArrowLeft size={18} />
               </PixelButton>
               <Logo />
             </div>
-            <h1 className="font-pixel text-lg text-black">
-              Module {moduleId}: {MODULE_TITLES[moduleId]}
-            </h1>
+            <div className="bg-black/60 border-2 border-yellow-400 rounded-lg px-4 py-2 backdrop-blur-sm">
+              <h1 className="font-pixel text-lg text-yellow-300">
+                Module {moduleId}: {MODULE_TITLES[moduleId]}
+              </h1>
+            </div>
           </div>
+
+          {/* Main Content Area */}
+          <div className="p-4 flex-1 overflow-auto">
 
           {!moduleComplete ? (
             <>
               {/* Main Layout: Video + Learning Interface */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                {/* Left: Video Feed */}
-                <div>
+                {/* Left: Video Feed + Feedback */}
+                <div className="flex flex-col gap-3">
+                  {/* Live Feed Label */}
+                  <div className="bg-black/50 border-2 border-blue-400 rounded-lg px-4 py-2 backdrop-blur-sm">
+                    <p className="font-pixel text-sm text-blue-300 text-center uppercase tracking-wider">
+                      📹 Live Feed
+                    </p>
+                  </div>
+
                   <VideoFeed
                     detecting={detecting}
                     calibrationDone={calibrationDone}
                     baseUrl={BASE_URL}
                   />
+
+                  {/* Incorrect Key Press Feedback */}
+                  {lastTip && calibrationDone && (
+                    <div className="bg-red-500/90 border-2 border-red-600 rounded-lg p-4 shadow-lg backdrop-blur-sm animate-in fade-in duration-300">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">⚠️</span>
+                        <div className="flex-1">
+                          <p className="font-pixel text-xs text-white/80 uppercase tracking-wider mb-1">
+                            Correction Needed
+                          </p>
+                          <p className="font-pixel text-sm text-white leading-relaxed">
+                            {lastTip}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right: Learning Interface */}
                 <div className="flex flex-col items-center justify-center gap-4">
                   {/* Module description */}
-                  <p className="font-pixel text-xs text-black/70 text-center">
-                    {MODULE_DESCRIPTIONS[moduleId]}
-                  </p>
+                  <PixelCard className="bg-black/50 border-2 border-yellow-400 backdrop-blur-sm px-6 py-3">
+                    <p className="font-pixel text-xs text-yellow-200 text-center">
+                      {MODULE_DESCRIPTIONS[moduleId]}
+                    </p>
+                  </PixelCard>
 
                   {/* Proper keyboard image for target letter */}
                   {keyboardImage && calibrationDone && (
@@ -479,19 +571,23 @@ export default function LearnSession() {
 
                   {/* Current target letter */}
                   {calibrationDone && targetChar && (
-                    <div className="text-center">
-                      <p className="font-pixel text-[10px] text-black/50 uppercase tracking-widest mb-1">
-                        Press this key
-                      </p>
-                      <p className="font-pixel text-5xl text-purple-600 animate-pulse drop-shadow-lg">
-                        {targetChar}
-                      </p>
-                    </div>
+                    <PixelCard className="bg-black/50 border-2 border-purple-400 backdrop-blur-sm px-8 py-6">
+                      <div className="text-center">
+                        <p className="font-pixel text-[10px] text-white/70 uppercase tracking-widest mb-2">
+                          Press this key
+                        </p>
+                        <p className="font-pixel text-6xl text-purple-400 animate-pulse drop-shadow-lg">
+                          {targetChar}
+                        </p>
+                      </div>
+                    </PixelCard>
                   )}
 
                   {/* Drill display with character-level feedback */}
                   {calibrationDone && currentDrill && (
-                    <PixelCard className="w-full max-w-md bg-black/60 border-2 border-yellow-300 backdrop-blur-sm">
+                    <PixelCard className={`w-full max-w-md bg-black/60 border-2 border-yellow-300 backdrop-blur-sm ${
+                      charFeedback[currentCharIndex] === "incorrect" ? "animate-shake" : ""
+                    }`}>
                       <div className="font-pixel text-xl text-center tracking-[0.3em] py-2">
                         {currentDrill.split("").map((ch, i) => {
                           let colorClass = "text-gray-500";
@@ -508,27 +604,20 @@ export default function LearnSession() {
                     </PixelCard>
                   )}
 
-                  {/* Correction tip */}
-                  {lastTip && calibrationDone && (
-                    <p className="font-pixel text-xs text-red-400 text-center">
-                      {lastTip}
-                    </p>
-                  )}
-
                   {/* Progress & Metrics */}
                   {calibrationDone && (
                     <div className="flex gap-4">
                       <PixelCard variant="yellow" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px] text-black/60">Drill</p>
-                        <p className="font-pixel text-lg text-black">{currentDrillIndex + 1}/{drills.length}</p>
+                        <p className="font-pixel text-[9px] text-foreground/60">Drill</p>
+                        <p className="font-pixel text-lg text-foreground">{currentDrillIndex + 1}/{drills.length}</p>
                       </PixelCard>
                       <PixelCard variant="green" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px] text-black/60">Accuracy</p>
-                        <p className="font-pixel text-lg text-black">{accuracyPercent}%</p>
+                        <p className="font-pixel text-[9px] text-foreground/60">Accuracy</p>
+                        <p className="font-pixel text-lg text-foreground">{accuracyPercent}%</p>
                       </PixelCard>
                       <PixelCard variant="purple" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px]">Correct</p>
-                        <p className="font-pixel text-lg">{correctCount}</p>
+                        <p className="font-pixel text-[9px] text-foreground/60">Correct</p>
+                        <p className="font-pixel text-lg text-foreground">{correctCount}</p>
                       </PixelCard>
                     </div>
                   )}
@@ -567,12 +656,12 @@ export default function LearnSession() {
           ) : (
             /* Module Complete Screen */
             <div className="flex items-center justify-center min-h-[60vh]">
-              <PixelCard className="p-8 text-center max-w-lg w-full bg-black/70 border-2 border-yellow-300 backdrop-blur-md">
-                <h2 className="font-pixel text-2xl text-yellow-200 mb-4">Module Complete!</h2>
+              <PixelCard className="p-8 text-center max-w-lg w-full bg-black/60 border-2 border-yellow-300 backdrop-blur-md shadow-2xl">
+                <h2 className="font-pixel text-2xl text-yellow-400 mb-4">Module Complete!</h2>
                 <p className="font-pixel text-sm text-white mb-2">
                   {MODULE_TITLES[moduleId]}
                 </p>
-                <p className="font-pixel text-xs text-white/70 mb-6">
+                <p className="font-pixel text-xs text-white/80 mb-6">
                   {accuracyPercent >= 90
                     ? "Excellent work! You're mastering these keys!"
                     : accuracyPercent >= 70
@@ -580,16 +669,16 @@ export default function LearnSession() {
                     : "Keep practicing! Focus on using the correct fingers."}
                 </p>
                 <div className="grid grid-cols-3 gap-4 mb-6">
-                  <PixelCard className="bg-black/50 border border-yellow-200 text-center">
-                    <p className="font-pixel text-[9px] text-yellow-200 mb-1">Accuracy</p>
+                  <PixelCard className="bg-black/40 border border-yellow-400 text-center">
+                    <p className="font-pixel text-[9px] text-yellow-400 mb-1">Accuracy</p>
                     <p className="font-pixel text-xl text-white">{accuracyPercent}%</p>
                   </PixelCard>
-                  <PixelCard className="bg-black/50 border border-green-400/50 text-center">
-                    <p className="font-pixel text-[9px] text-green-300 mb-1">Correct</p>
+                  <PixelCard className="bg-black/40 border border-green-400 text-center">
+                    <p className="font-pixel text-[9px] text-green-400 mb-1">Correct</p>
                     <p className="font-pixel text-xl text-white">{correctCount}</p>
                   </PixelCard>
-                  <PixelCard className="bg-black/50 border border-red-400/50 text-center">
-                    <p className="font-pixel text-[9px] text-red-300 mb-1">Incorrect</p>
+                  <PixelCard className="bg-black/40 border border-red-400 text-center">
+                    <p className="font-pixel text-[9px] text-red-400 mb-1">Incorrect</p>
                     <p className="font-pixel text-xl text-white">{incorrectCount}</p>
                   </PixelCard>
                 </div>
@@ -599,8 +688,8 @@ export default function LearnSession() {
               </PixelCard>
             </div>
           )}
+          </div>
         </div>
-      </div>
     </div>
   );
 }

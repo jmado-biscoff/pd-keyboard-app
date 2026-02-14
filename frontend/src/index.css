@@ -186,4 +186,43 @@
   .pixel-scrollbar-vertical::-webkit-scrollbar-thumb:hover {
     background: #fbbf24;
   }
+
+  /* Pixel-style sliders */
+  .slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #eab308;
+    cursor: pointer;
+    border: 2px solid rgba(0, 0, 0, 0.4);
+    box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .slider::-webkit-slider-thumb:hover {
+    background: #fbbf24;
+    transform: scale(1.1);
+  }
+
+  .slider::-webkit-slider-thumb:active {
+    background: #ca8a04;
+  }
+
+  .slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #eab308;
+    cursor: pointer;
+    border: 2px solid rgba(0, 0, 0, 0.4);
+    box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.3);
+    border-radius: 0;
+  }
+
+  .slider::-moz-range-thumb:hover {
+    background: #fbbf24;
+    transform: scale(1.1);
+  }
+
+  .slider::-moz-range-thumb:active {
+    background: #ca8a04;
+  }
 }

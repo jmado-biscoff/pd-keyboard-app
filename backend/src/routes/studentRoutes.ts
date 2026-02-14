@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyToken, AuthRequest } from "../../middleware/authMiddleware";
 import Classroom from "../models/Classroom";
+import { User } from "../models/User";
 
 const studentRoutes = express.Router();
 
@@ -160,6 +161,127 @@ studentRoutes.get(
     } catch (error) {
       console.error("Error checking evaluation status:", error);
       res.status(500).json({ message: "Failed to check evaluation status" });
+    }
+  }
+);
+
+/**
+ * @route GET /api/student/learning-progress
+ * @desc Get student's learning module progress
+ */
+studentRoutes.get(
+  "/learning-progress",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "student") {
+        return res.status(403).json({ message: "Access denied. Students only." });
+      }
+
+      const student = await User.findById(user.id);
+      if (!student) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Convert Map to plain object for JSON response
+      const progress = student.learningProgress || new Map();
+      const progressObj: Record<string, any> = {};
+      progress.forEach((value: any, key: string) => {
+        progressObj[key] = value;
+      });
+
+      res.status(200).json(progressObj);
+    } catch (error) {
+      console.error("Error fetching learning progress:", error);
+      res.status(500).json({ message: "Failed to fetch learning progress" });
+    }
+  }
+);
+
+/**
+ * @route POST /api/student/learning-progress
+ * @desc Update progress for a specific learning module
+ */
+studentRoutes.post(
+  "/learning-progress",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "student") {
+        return res.status(403).json({ message: "Access denied. Students only." });
+      }
+
+      const { moduleId, completed, accuracy } = req.body;
+
+      if (!moduleId || typeof completed !== "boolean" || typeof accuracy !== "number") {
+        return res.status(400).json({ message: "Invalid request body" });
+      }
+
+      const student = await User.findById(user.id);
+      if (!student) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Initialize learningProgress if not exists
+      if (!student.learningProgress) {
+        student.learningProgress = new Map();
+      }
+
+      // Get existing progress for this module or create new
+      const existing = student.learningProgress.get(String(moduleId)) || {
+        completed: false,
+        accuracy: 0,
+        lastAttemptDate: null,
+        attempts: 0,
+      };
+
+      // Update progress
+      student.learningProgress.set(String(moduleId), {
+        completed,
+        accuracy,
+        lastAttemptDate: new Date(),
+        attempts: existing.attempts + 1,
+      });
+
+      await student.save();
+
+      res.status(200).json({ message: "Progress saved successfully" });
+    } catch (error) {
+      console.error("Error saving learning progress:", error);
+      res.status(500).json({ message: "Failed to save learning progress" });
+    }
+  }
+);
+
+/**
+ * @route PUT /api/student/learning-progress/reset
+ * @desc Reset all learning progress for the student
+ */
+studentRoutes.put(
+  "/learning-progress/reset",
+  verifyToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const user = req.user as any;
+      if (user?.role !== "student") {
+        return res.status(403).json({ message: "Access denied. Students only." });
+      }
+
+      const student = await User.findById(user.id);
+      if (!student) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Clear all learning progress
+      student.learningProgress = new Map();
+      await student.save();
+
+      res.status(200).json({ message: "Learning progress reset successfully" });
+    } catch (error) {
+      console.error("Error resetting learning progress:", error);
+      res.status(500).json({ message: "Failed to reset learning progress" });
     }
   }
 );

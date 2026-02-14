@@ -6,6 +6,7 @@ import { PixelCard } from "@/components/PixelCard";
 import { PixelInput } from "@/components/PixelInput";
 import { Logo } from "@/components/Logo";
 import { toast } from "sonner";
+import { Camera, Monitor, CheckCircle, Eye } from "lucide-react";
 import bgGif from "@/assets/bg.gif";
 import { getRandomProfile } from "@/utils/profileAssets";
 
@@ -17,6 +18,7 @@ export default function Auth() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [userType, setUserType] = useState<UserType>("student");
   const [loading, setLoading] = useState(false);
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -61,16 +63,16 @@ export default function Auth() {
       const payload =
         authMode === "signup"
           ? {
-              name: formData.name,
-              email: formData.email,
-              password: formData.password,
-              role: userType,
-              profilePicture: getRandomProfile(userType),
-            }
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            role: userType,
+            profilePicture: getRandomProfile(userType),
+          }
           : {
-              email: formData.email,
-              password: formData.password,
-            };
+            email: formData.email,
+            password: formData.password,
+          };
 
       // ✅ send POST request
       const res = await axios.post(endpoint, payload, {
@@ -227,8 +229,8 @@ export default function Auth() {
               {loading
                 ? "Please wait..."
                 : authMode === "login"
-                ? "Login"
-                : "Sign Up"}
+                  ? "Login"
+                  : "Sign Up"}
             </PixelButton>
           </form>
 
@@ -246,7 +248,122 @@ export default function Auth() {
             </button>
           </div>
         </PixelCard>
+
+        {/* ✅ NEW: Setup Guide Button - Bottom Right */}
+        <div className="fixed bottom-6 right-6 z-10">
+          <PixelButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowSetupGuide(true)}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Camera size={16} />
+            Setup Guide
+          </PixelButton>
+        </div>
       </div>
+
+      {/* ✅ NEW: Setup Guide Modal */}
+      {showSetupGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <PixelCard className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="font-pixel text-2xl mb-6 text-center">
+                Camera Setup Guide
+              </h2>
+
+              {/* 4-Panel Grid */}
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
+                {/* Panel 1: Top-View Position */}
+                <div className="bg-blue-500/10 border-2 border-blue-400/50 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-blue-500 rounded-full p-2">
+                      <Camera size={24} className="text-white" />
+                    </div>
+                    <h3 className="font-pixel text-sm text-blue-400">
+                      1. Top-View Position
+                    </h3>
+                  </div>
+                  <p className="font-pixel text-xs text-muted-foreground leading-relaxed">
+                    Position your camera directly above your keyboard in a bird's-eye view.
+                    The camera should capture the entire keyboard from top to bottom.
+                  </p>
+                </div>
+
+                {/* Panel 2: Keep Keyboard Still */}
+                <div className="bg-green-500/10 border-2 border-green-400/50 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-green-500 rounded-full p-2">
+                      <Monitor size={24} className="text-white" />
+                    </div>
+                    <h3 className="font-pixel text-sm text-green-400">
+                      2. Keyboard Stays Still
+                    </h3>
+                  </div>
+                  <p className="font-pixel text-xs text-muted-foreground leading-relaxed">
+                    Once positioned, do NOT move your keyboard or camera during the session.
+                    Movement will break calibration and require restarting.
+                  </p>
+                </div>
+
+                {/* Panel 3: Camera Permission */}
+                <div className="bg-purple-500/10 border-2 border-purple-400/50 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-purple-500 rounded-full p-2">
+                      <CheckCircle size={24} className="text-white" />
+                    </div>
+                    <h3 className="font-pixel text-sm text-purple-400">
+                      3. Allow Camera Permission
+                    </h3>
+                  </div>
+                  <p className="font-pixel text-xs text-muted-foreground leading-relaxed">
+                    Your browser will ask for camera access. Click "Allow" to enable
+                    hand-tracking detection. We never record or store video.
+                  </p>
+                </div>
+
+                {/* Panel 4: Mirror View */}
+                <div className="bg-orange-500/10 border-2 border-orange-400/50 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-orange-500 rounded-full p-2">
+                      <Eye size={24} className="text-white" />
+                    </div>
+                    <h3 className="font-pixel text-sm text-orange-400">
+                      4. Mirror View Check
+                    </h3>
+                  </div>
+                  <p className="font-pixel text-xs text-muted-foreground leading-relaxed">
+                    Ensure the camera view mirrors your keyboard exactly as it appears
+                    in front of you. All keys should be clearly visible.
+                  </p>
+                </div>
+              </div>
+
+              {/* Additional Tips */}
+              <div className="bg-yellow-500/10 border-2 border-yellow-400/50 rounded-lg p-4 mb-6">
+                <p className="font-pixel text-xs text-yellow-400 mb-2">💡 Pro Tips:</p>
+                <ul className="font-pixel text-[10px] text-muted-foreground space-y-1 leading-relaxed">
+                  <li>• Use good lighting - avoid shadows on the keyboard</li>
+                  <li>• Remove hands during initialization phase</li>
+                  <li>• Use a stable camera mount or tripod for best results</li>
+                  <li>• Test your setup before starting a graded session</li>
+                </ul>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-center">
+                <PixelButton
+                  variant="accent"
+                  onClick={() => setShowSetupGuide(false)}
+                  className="px-8"
+                >
+                  Got it!
+                </PixelButton>
+              </div>
+            </div>
+          </PixelCard>
+        </div>
+      )}
     </div>
   );
 }

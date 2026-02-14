@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { AudioProvider } from "@/contexts/AudioContext";
 
 // 🔹 Pages
 import Auth from "./pages/Auth";
@@ -37,21 +38,22 @@ const App = () => (
           <Route path="/" element={<Auth />} />
 
           {/* ========================================================= */}
-          {/* 🔹 STUDENT ROUTES */}
+          {/* 🔹 STUDENT ROUTES (Wrapped with AudioProvider) */}
           {/* ========================================================= */}
-          <Route path="/student/dashboard" element={<StudentDashboard />} />
-          <Route path="/student/learn" element={<Learn />} />
+          <Route path="/student" element={<AudioProvider><Outlet /></AudioProvider>}>
+            <Route path="dashboard" element={<StudentDashboard />} />
+            <Route path="learn" element={<Learn />} />
 
-          {/* 🔸 Learn Session (ML-detected modules) */}
-          <Route path="/student/learn/session" element={<LearnSession />} />
+            {/* 🔸 Learn Session (ML-detected modules) */}
+            <Route path="learn/session" element={<LearnSession />} />
 
+            {/* 🔸 Game / Practice */}
+            <Route path="play" element={<Play />} />
+            <Route path="play/session" element={<PlaySession />} />
 
-          {/* 🔸 Game / Practice */}
-          <Route path="/student/play" element={<Play />} />
-          <Route path="/student/play/session" element={<PlaySession />} />
-
-          {/* 🔸 Settings */}
-          <Route path="/student/settings" element={<StudentSettings />} />
+            {/* 🔸 Settings */}
+            <Route path="settings" element={<StudentSettings />} />
+          </Route>
 
           {/* ========================================================= */}
           {/* 🔹 TEACHER ROUTES */}
