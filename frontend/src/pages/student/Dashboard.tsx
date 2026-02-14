@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { PixelCard } from "@/components/PixelCard";
 import { PixelButton } from "@/components/PixelButton";
-import { Clock, HelpCircle, BookOpen, Gamepad2, Trophy, Target } from "lucide-react";
+import { BookOpen, Gamepad2, Trophy, Target } from "lucide-react";
 import learnIcon from "@/assets/file-logo.png";
 import settingsIcon from "@/assets/settings-logo.png";
 import playIcon from "@/assets/keyboard-logo.png";
@@ -18,8 +18,6 @@ export default function StudentDashboard() {
   const profileKey = localStorage.getItem("profilePicture") || "";
   const profilePic = resolveProfileImage(profileKey) || fallbackProfilePic;
   const [classrooms, setClassrooms] = useState<any[]>([]);
-  const [activeEvalName, setActiveEvalName] = useState<string | null>(null);
-  const [evalRemaining, setEvalRemaining] = useState(0);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   // 🔹 Fetch classrooms the student has joined
@@ -41,26 +39,6 @@ export default function StudentDashboard() {
       }
     };
     fetchClassrooms();
-
-    // Check for active evaluation
-    const checkEval = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      try {
-        const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
-        const res = await fetch(`${BASE_URL}/api/student/evaluation-status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.hasActiveEvaluation && data.evaluation) {
-            setActiveEvalName(data.evaluation.classroomName);
-            setEvalRemaining(data.evaluation.remainingSeconds);
-          }
-        }
-      } catch { /* silent */ }
-    };
-    checkEval();
   }, []);
 
   const menuItems = [
@@ -120,28 +98,6 @@ export default function StudentDashboard() {
               </div>
             </div>
           </div>
-
-          {/* Active Activity / Graded Banner */}
-          {activeEvalName && evalRemaining > 0 && (
-            <PixelCard variant="red" className="text-white mb-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Clock size={20} />
-                  <div>
-                    <p className="font-pixel text-sm">
-                      Active Activity — {activeEvalName}
-                    </p>
-                    <p className="font-pixel text-[10px] opacity-80">
-                      {Math.ceil(evalRemaining / 60)} minutes remaining
-                    </p>
-                  </div>
-                </div>
-                <PixelButton variant="accent" size="sm" onClick={() => navigate("/student/play")}>
-                  Go to Activity
-                </PixelButton>
-              </div>
-            </PixelCard>
-          )}
 
           {/* 🟣 My Classrooms Section */}
           <PixelCard variant="purple" className="text-white mb-10">

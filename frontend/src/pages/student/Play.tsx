@@ -3,7 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
-import { ArrowLeft, Trophy, Clock, RefreshCw, Lock } from "lucide-react";
+import { ArrowLeft, Trophy, Clock, RefreshCw, Lock, HelpCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import bgVideo from "@/assets/bg1.mp4";
 
 const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
@@ -30,6 +36,9 @@ export default function Play() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Classroom enrollment state
+  const [classrooms, setClassrooms] = useState<any[]>([]);
+
   // Evaluation state
   const [evalStatus, setEvalStatus] = useState<EvaluationStatus | null>(null);
   const [proctorTimeLeft, setProctorTimeLeft] = useState(0);
@@ -52,6 +61,26 @@ export default function Play() {
       : evalLevel === "words" ? [2]
       : [1, 2]
     : [];
+
+  // Tooltip content for Activity/Graded toggle
+  const getActivityTooltip = () => {
+    if (classrooms.length === 0) {
+      return {
+        message: "You are not enrolled in any classroom. Please join a classroom first to participate in activities.",
+        variant: "warning" as const,
+      };
+    }
+    if (hasActiveEval) {
+      return {
+        message: "Active evaluation in progress! Click 'Go to Activity' to participate.",
+        variant: "success" as const,
+      };
+    }
+    return {
+      message: "Your teacher has not started a new session yet. Check back later or contact your teacher.",
+      variant: "info" as const,
+    };
+  };
 
   // 🔹 Fetch recent sessions from MongoDB (Privacy filtered)
   const fetchResults = async () => {
@@ -106,10 +135,27 @@ export default function Play() {
     } catch { /* silent */ }
   };
 
+  // 🔹 Fetch classrooms the student has joined
+  const fetchClassrooms = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/student/my-classrooms`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setClassrooms(data);
+      }
+    } catch { /* silent */ }
+  };
+
   // Fetch on mount
   useEffect(() => {
     fetchResults();
     fetchEvalStatus();
+    fetchClassrooms();
   }, []);
 
   // Poll evaluation status every 30s
@@ -251,16 +297,40 @@ export default function Play() {
                     >
                       Practice
                     </button>
-                    <button
-                      type="button"
-                      className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 flex items-center justify-center gap-1 transition-colors ${
-                        sessionType === "evaluated" ? "text-black" : "text-white/70"
-                      }`}
-                      onClick={() => { if (!hasActiveEval && hasActiveEval) setSessionType("evaluated"); }}
-                    >
-                      Activity / Graded
-                      {!hasActiveEval && <Lock size={10} />}
-                    </button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 flex items-center justify-center gap-1 transition-colors ${
+                              sessionType === "evaluated" ? "text-black" : "text-white/70"
+                            }`}
+                            onClick={() => { if (!hasActiveEval && hasActiveEval) setSessionType("evaluated"); }}
+                          >
+                            Activity / Graded
+                            {!hasActiveEval && <Lock size={10} />}
+                            <HelpCircle size={10} className="opacity-60 hover:opacity-100 transition-opacity" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className={`max-w-[250px] ${
+                          getActivityTooltip().variant === "warning"
+                            ? "border-yellow-500/50 bg-yellow-950/90"
+                            : getActivityTooltip().variant === "success"
+                            ? "border-green-500/50 bg-green-950/90"
+                            : "border-blue-500/50 bg-blue-950/90"
+                        }`}>
+                          <p className={`font-pixel text-xs ${
+                            getActivityTooltip().variant === "warning"
+                              ? "text-yellow-200"
+                              : getActivityTooltip().variant === "success"
+                              ? "text-green-200"
+                              : "text-blue-200"
+                          }`}>
+                            {getActivityTooltip().message}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <p className="font-pixel text-[10px] mt-2 opacity-90">
                     {hasActiveEval
