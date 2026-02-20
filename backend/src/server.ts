@@ -41,10 +41,10 @@ app.use("/api/learn", learnRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+  app.use(express.static(path.join(__dirname, "../../../frontend/dist")));
   app.get("*", (req: Request, res: Response) => {
     if (!req.path.startsWith("/api")) {
-      res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
+      res.sendFile(path.join(__dirname, "../../../frontend/dist/index.html"));
     }
   });
 } else {
