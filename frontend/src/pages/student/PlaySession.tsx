@@ -25,7 +25,7 @@ import type {
   SessionHistoryEntry,
 } from "@/types/typing";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 declare global {
   interface Window {
@@ -245,7 +245,7 @@ export default function PlaySession() {
   useEffect(() => {
     const fetchTypingData = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/typing/level/${level}`);
+        const res = await fetch(`${API_BASE}/typing/level/${level}`);
         const data = await res.json();
         if (data && data.data) {
           const text = data.data.join(" ");
@@ -676,7 +676,7 @@ export default function PlaySession() {
     if (sessionType === "evaluated") {
       try {
         const userId = localStorage.getItem("userName") || "guest";
-        await fetch(`${BASE_URL}/api/results`, {
+        await fetch(`${API_BASE}/results`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -853,11 +853,10 @@ export default function PlaySession() {
                           <span className="font-pixel text-sm text-white/40">-</span>
                         </div>
                       ) : (
-                        <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center shadow-lg ${
-                          entry.status === "correct" ? "bg-green-500 border-green-600/50" :
-                          entry.status === "wrong_finger" ? "bg-orange-500 border-orange-600/50" :
-                          "bg-red-500 border-red-600/50"
-                        }`}>
+                        <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center shadow-lg ${entry.status === "correct" ? "bg-green-500 border-green-600/50" :
+                            entry.status === "wrong_finger" ? "bg-orange-500 border-orange-600/50" :
+                              "bg-red-500 border-red-600/50"
+                          }`}>
                           <span className="font-pixel text-xl text-white uppercase">
                             {entry.char === " " ? "\u2423" : entry.char}
                           </span>

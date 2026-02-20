@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/tooltip";
 import bgVideo from "@/assets/bg1.mp4";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 interface EvaluationStatus {
   hasActiveEvaluation: boolean;
@@ -59,7 +59,7 @@ export default function Play() {
   const evalLevels: number[] = hasActiveEval
     ? evalLevel === "characters" ? [1]
       : evalLevel === "words" ? [2]
-      : [1, 2]
+        : [1, 2]
     : [];
 
   // Tooltip content for Activity/Graded toggle
@@ -88,7 +88,7 @@ export default function Play() {
     const userId = localStorage.getItem("userName") || "guest";
 
     try {
-      const res = await fetch(`${BASE_URL}/api/results?userId=${userId}`);
+      const res = await fetch(`${API_BASE}/results?userId=${userId}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setHistory(data);
@@ -105,7 +105,7 @@ export default function Play() {
     const token = localStorage.getItem("token");
     if (!token) return;
     try {
-      const res = await fetch(`${BASE_URL}/api/student/evaluation-status`, {
+      const res = await fetch(`${API_BASE}/student/evaluation-status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -126,8 +126,8 @@ export default function Play() {
     const userId = localStorage.getItem("userName") || "guest";
     try {
       const [res1, res2] = await Promise.all([
-        fetch(`${BASE_URL}/api/results/count?userId=${userId}&since=${activatedAt}&level=1`),
-        fetch(`${BASE_URL}/api/results/count?userId=${userId}&since=${activatedAt}&level=2`),
+        fetch(`${API_BASE}/results/count?userId=${userId}&since=${activatedAt}&level=1`),
+        fetch(`${API_BASE}/results/count?userId=${userId}&since=${activatedAt}&level=2`),
       ]);
       const d1 = res1.ok ? await res1.json() : { count: 0 };
       const d2 = res2.ok ? await res2.json() : { count: 0 };
@@ -141,7 +141,7 @@ export default function Play() {
     if (!token) return;
     try {
       const res = await fetch(
-        `${BASE_URL}/api/student/my-classrooms`,
+        `${API_BASE}/student/my-classrooms`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) {
@@ -276,9 +276,8 @@ export default function Play() {
                 <div>
                   <label className="block font-pixel text-xs mb-3">Session Type</label>
                   <div
-                    className={`relative flex items-center w-full h-10 rounded-lg border-2 overflow-hidden ${
-                      hasActiveEval ? "opacity-60 pointer-events-none" : ""
-                    }`}
+                    className={`relative flex items-center w-full h-10 rounded-lg border-2 overflow-hidden ${hasActiveEval ? "opacity-60 pointer-events-none" : ""
+                      }`}
                     style={{ borderColor: "rgba(255,255,255,0.3)" }}
                   >
                     {/* Sliding highlight */}
@@ -290,9 +289,8 @@ export default function Play() {
                     />
                     <button
                       type="button"
-                      className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 transition-colors ${
-                        sessionType === "practice" ? "text-black" : "text-white/70"
-                      }`}
+                      className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 transition-colors ${sessionType === "practice" ? "text-black" : "text-white/70"
+                        }`}
                       onClick={() => { if (!hasActiveEval) setSessionType("practice"); }}
                     >
                       Practice
@@ -302,9 +300,8 @@ export default function Play() {
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 flex items-center justify-center gap-1 transition-colors ${
-                              sessionType === "evaluated" ? "text-black" : "text-white/70"
-                            }`}
+                            className={`relative z-10 flex-1 font-pixel text-xs text-center py-2 flex items-center justify-center gap-1 transition-colors ${sessionType === "evaluated" ? "text-black" : "text-white/70"
+                              }`}
                             onClick={() => { if (!hasActiveEval && hasActiveEval) setSessionType("evaluated"); }}
                           >
                             Activity / Graded
@@ -312,20 +309,18 @@ export default function Play() {
                             <HelpCircle size={10} className="opacity-60 hover:opacity-100 transition-opacity" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" className={`max-w-[250px] ${
-                          getActivityTooltip().variant === "warning"
-                            ? "border-yellow-500/50 bg-yellow-950/90"
-                            : getActivityTooltip().variant === "success"
+                        <TooltipContent side="bottom" className={`max-w-[250px] ${getActivityTooltip().variant === "warning"
+                          ? "border-yellow-500/50 bg-yellow-950/90"
+                          : getActivityTooltip().variant === "success"
                             ? "border-green-500/50 bg-green-950/90"
                             : "border-blue-500/50 bg-blue-950/90"
-                        }`}>
-                          <p className={`font-pixel text-xs ${
-                            getActivityTooltip().variant === "warning"
-                              ? "text-yellow-200"
-                              : getActivityTooltip().variant === "success"
+                          }`}>
+                          <p className={`font-pixel text-xs ${getActivityTooltip().variant === "warning"
+                            ? "text-yellow-200"
+                            : getActivityTooltip().variant === "success"
                               ? "text-green-200"
                               : "text-blue-200"
-                          }`}>
+                            }`}>
                             {getActivityTooltip().message}
                           </p>
                         </TooltipContent>
@@ -392,11 +387,10 @@ export default function Play() {
                             {Array.from({ length: maxAttempts }).map((_, i) => (
                               <div
                                 key={i}
-                                className={`w-7 h-5 border-2 rounded-sm transition-all ${
-                                  i < remaining
-                                    ? "bg-green-500 border-green-300 shadow-[0_0_6px_rgba(34,197,94,0.4)]"
-                                    : "bg-gray-700/50 border-gray-600/50 opacity-40"
-                                }`}
+                                className={`w-7 h-5 border-2 rounded-sm transition-all ${i < remaining
+                                  ? "bg-green-500 border-green-300 shadow-[0_0_6px_rgba(34,197,94,0.4)]"
+                                  : "bg-gray-700/50 border-gray-600/50 opacity-40"
+                                  }`}
                               />
                             ))}
                             <span className="font-pixel text-[10px] opacity-60 w-8 text-right">

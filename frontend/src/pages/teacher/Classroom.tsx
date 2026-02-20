@@ -23,7 +23,7 @@ import bgVideo from "@/assets/b11.mp4";
 import { resolveProfileImage } from "@/utils/profileAssets";
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function Classroom() {
   const navigate = useNavigate();
@@ -60,7 +60,7 @@ export default function Classroom() {
   const fetchClassrooms = async () => {
     try {
       const res = await fetch(
-        `${BASE_URL}/api/teacher/my-classrooms`,
+        `${API_BASE}/teacher/my-classrooms`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -123,7 +123,7 @@ export default function Classroom() {
     if (!settings) return;
     try {
       const res = await fetch(
-        `${BASE_URL}/api/teacher/classroom/${classroomId}/evaluation`,
+        `${API_BASE}/teacher/classroom/${classroomId}/evaluation`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -143,7 +143,7 @@ export default function Classroom() {
       // Save settings first if activating
       if (activate) await saveEvalSettings(classroomId);
       const res = await fetch(
-        `${BASE_URL}/api/teacher/classroom/${classroomId}/evaluation/activate`,
+        `${API_BASE}/teacher/classroom/${classroomId}/evaluation/activate`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -175,7 +175,7 @@ export default function Classroom() {
   const handleDelete = async (classroomId: string) => {
     try {
       const res = await fetch(
-        `${BASE_URL}/api/teacher/classroom/${classroomId}`,
+        `${API_BASE}/teacher/classroom/${classroomId}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -198,7 +198,7 @@ export default function Classroom() {
     if (!newClassName.trim()) return toast.error("Enter a classroom name");
     try {
       const res = await fetch(
-        `${BASE_URL}/api/teacher/create-classroom`,
+        `${API_BASE}/teacher/create-classroom`,
         {
           method: "POST",
           headers: {
@@ -232,13 +232,13 @@ export default function Classroom() {
 
       const [studentsRes, requestsRes] = await Promise.all([
         fetch(
-          `${BASE_URL}/api/teacher/classroom/${classroomId}/students`,
+          `${API_BASE}/teacher/classroom/${classroomId}/students`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         ),
         fetch(
-          `${BASE_URL}/api/teacher/classroom/${classroomId}/requests`,
+          `${API_BASE}/teacher/classroom/${classroomId}/requests`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -285,7 +285,7 @@ export default function Classroom() {
   ) => {
     try {
       const res = await fetch(
-        `${BASE_URL}/api/teacher/classroom/${classId}/${decision}`,
+        `${API_BASE}/teacher/classroom/${classId}/${decision}`,
         {
           method: "POST",
           headers: {
@@ -322,267 +322,267 @@ export default function Classroom() {
       {/* Page Content */}
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">
         <div className="max-w-6xl mx-auto">
-        {/* 🔙 Back to Dashboard */}
-        <div className="flex items-center gap-4 mb-12">
-          <PixelButton
-            variant="secondary"
-            onClick={() => navigate("/teacher/dashboard")}
-          >
-            <ArrowLeft size={20} />
-          </PixelButton>
-          <Logo />
-        </div>
-
-        {/* 🔸 Create new classroom */}
-        <PixelCard variant="orange" className="mb-10 text-white">
-          <h2 className="font-pixel text-xl mb-3 flex items-center gap-2">
-            <PlusCircle size={22} /> Create New Classroom
-          </h2>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="Enter classroom name"
-              className="px-4 py-2 rounded-lg text-black flex-1 font-pixel text-sm"
-              value={newClassName}
-              onChange={(e) => setNewClassName(e.target.value)}
-            />
-            <PixelButton onClick={handleCreate}>Create</PixelButton>
-          </div>
-        </PixelCard>
-
-        {/* 🏫 Classroom Cards */}
-        <div className="space-y-6">
-          {classrooms.map((cls) => (
-            <PixelCard
-              key={cls._id}
-              variant="orange"
-              className="text-white shadow-lg transition-all hover:scale-[1.01] border-2 border-transparent hover:border-white/20"
+          {/* 🔙 Back to Dashboard */}
+          <div className="flex items-center gap-4 mb-12">
+            <PixelButton
+              variant="secondary"
+              onClick={() => navigate("/teacher/dashboard")}
             >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <School size={24} />
-                  <div>
-                    <p className="font-pixel text-sm">{cls.name}</p>
-                    <p className="font-pixel text-xl opacity-80">{cls.code}</p>
+              <ArrowLeft size={20} />
+            </PixelButton>
+            <Logo />
+          </div>
+
+          {/* 🔸 Create new classroom */}
+          <PixelCard variant="orange" className="mb-10 text-white">
+            <h2 className="font-pixel text-xl mb-3 flex items-center gap-2">
+              <PlusCircle size={22} /> Create New Classroom
+            </h2>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder="Enter classroom name"
+                className="px-4 py-2 rounded-lg text-black flex-1 font-pixel text-sm"
+                value={newClassName}
+                onChange={(e) => setNewClassName(e.target.value)}
+              />
+              <PixelButton onClick={handleCreate}>Create</PixelButton>
+            </div>
+          </PixelCard>
+
+          {/* 🏫 Classroom Cards */}
+          <div className="space-y-6">
+            {classrooms.map((cls) => (
+              <PixelCard
+                key={cls._id}
+                variant="orange"
+                className="text-white shadow-lg transition-all hover:scale-[1.01] border-2 border-transparent hover:border-white/20"
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <School size={24} />
+                    <div>
+                      <p className="font-pixel text-sm">{cls.name}</p>
+                      <p className="font-pixel text-xl opacity-80">{cls.code}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <PixelButton
+                      variant="accent"
+                      onClick={() => copyClassroomCode(cls.code)}
+                      className="hover:scale-110 transition-transform"
+                    >
+                      <Copy size={16} />
+                    </PixelButton>
+                    <PixelButton
+                      variant="purple"
+                      onClick={() => toggleExpand(cls._id)}
+                      className="hover:scale-110 transition-transform"
+                    >
+                      {expanded === cls._id ? "Hide Students" : "Show Students"}
+                    </PixelButton>
+                    <PixelButton
+                      variant="red"
+                      onClick={() => setDeleteConfirm(cls._id)}
+                      className="hover:scale-110 transition-transform"
+                    >
+                      <Trash2 size={16} />
+                    </PixelButton>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <PixelButton
-                    variant="accent"
-                    onClick={() => copyClassroomCode(cls.code)}
-                    className="hover:scale-110 transition-transform"
-                  >
-                    <Copy size={16} />
-                  </PixelButton>
-                  <PixelButton
-                    variant="purple"
-                    onClick={() => toggleExpand(cls._id)}
-                    className="hover:scale-110 transition-transform"
-                  >
-                    {expanded === cls._id ? "Hide Students" : "Show Students"}
-                  </PixelButton>
-                  <PixelButton
-                    variant="red"
-                    onClick={() => setDeleteConfirm(cls._id)}
-                    className="hover:scale-110 transition-transform"
-                  >
-                    <Trash2 size={16} />
-                  </PixelButton>
-                </div>
-              </div>
 
-              {/* Expanded student + pending requests list */}
-              {expanded === cls._id && (
-                <div className="mt-4 bg-black/20 rounded-lg p-4 overflow-hidden">
-                  {loadingStudents ? (
-                    <div className="flex justify-center py-4">
-                      <Loader2 className="animate-spin" />
-                    </div>
-                  ) : (
-                    <>
-                      {/* 🧾 Pending Join Requests */}
-                      <h3 className="font-pixel text-sm mb-3 flex items-center gap-2">
-                        <Users size={16} /> Pending Join Requests
-                      </h3>
-                      {pendingRequestsMap[cls._id]?.length > 0 ? (
-                        <ul className="space-y-2 mb-4">
-                          {pendingRequestsMap[cls._id].map((student) => (
-                            <li
-                              key={student._id}
-                              className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md"
-                            >
-                              <div className="flex flex-col">
-                                <span>{student.name || "Unnamed Student"}</span>
-                                <span className="opacity-70 text-[10px]">
-                                  {student.email}
-                                </span>
-                              </div>
-                              <div className="flex gap-2">
-                                <PixelButton
-                                  variant="accent"
-                                  onClick={() =>
-                                    handleDecision(
-                                      cls._id,
-                                      student._id,
-                                      "approve"
-                                    )
-                                  }
-                                >
-                                  <CheckCircle size={14} />
-                                </PixelButton>
-                                <PixelButton
-                                  variant="red"
-                                  onClick={() =>
-                                    handleDecision(
-                                      cls._id,
-                                      student._id,
-                                      "reject"
-                                    )
-                                  }
-                                >
-                                  <XCircle size={14} />
-                                </PixelButton>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="font-pixel text-xs text-center opacity-70 py-2">
-                          No pending join requests.
-                        </p>
-                      )}
-
-                      {/* 👩‍🎓 Enrolled Students */}
-                      <h3 className="font-pixel text-sm mb-3 flex items-center gap-2 mt-4">
-                        <Users size={16} /> Enrolled Students
-                      </h3>
-                      {studentsMap[cls._id]?.length > 0 ? (
-                        <ul className="space-y-2">
-                          {studentsMap[cls._id].map((student, idx) => (
-                            <li
-                              key={student._id}
-                              className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md cursor-pointer hover:bg-white/20 transition-colors"
-                              onClick={() =>
-                                setAnalyticsModal({
-                                  open: true,
-                                  studentId: student._id,
-                                  studentName: student.name || "Unnamed Student",
-                                  classroomId: cls._id,
-                                })
-                              }
-                            >
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={resolveProfileImage(student.profilePicture) || fallbackProfilePic}
-                                  alt="Avatar"
-                                  className="w-8 h-8 rounded-md border border-white/20 object-cover image-render-pixel"
-                                />
-                                <span>{student.name || "Unnamed Student"}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="opacity-70 text-[10px]">
-                                  {student.email}
-                                </span>
-                                <BarChart3 size={14} className="opacity-60" />
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="font-pixel text-xs text-center opacity-70 py-2">
-                          📭 No students joined yet.
-                        </p>
-                      )}
-
-                      {/* Activity Settings Panel */}
-                      <div className="mt-6 border-t border-white/20 pt-4">
+                {/* Expanded student + pending requests list */}
+                {expanded === cls._id && (
+                  <div className="mt-4 bg-black/20 rounded-lg p-4 overflow-hidden">
+                    {loadingStudents ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="animate-spin" />
+                      </div>
+                    ) : (
+                      <>
+                        {/* 🧾 Pending Join Requests */}
                         <h3 className="font-pixel text-sm mb-3 flex items-center gap-2">
-                          <Settings size={16} /> Activity Settings
+                          <Users size={16} /> Pending Join Requests
                         </h3>
+                        {pendingRequestsMap[cls._id]?.length > 0 ? (
+                          <ul className="space-y-2 mb-4">
+                            {pendingRequestsMap[cls._id].map((student) => (
+                              <li
+                                key={student._id}
+                                className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md"
+                              >
+                                <div className="flex flex-col">
+                                  <span>{student.name || "Unnamed Student"}</span>
+                                  <span className="opacity-70 text-[10px]">
+                                    {student.email}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <PixelButton
+                                    variant="accent"
+                                    onClick={() =>
+                                      handleDecision(
+                                        cls._id,
+                                        student._id,
+                                        "approve"
+                                      )
+                                    }
+                                  >
+                                    <CheckCircle size={14} />
+                                  </PixelButton>
+                                  <PixelButton
+                                    variant="red"
+                                    onClick={() =>
+                                      handleDecision(
+                                        cls._id,
+                                        student._id,
+                                        "reject"
+                                      )
+                                    }
+                                  >
+                                    <XCircle size={14} />
+                                  </PixelButton>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="font-pixel text-xs text-center opacity-70 py-2">
+                            No pending join requests.
+                          </p>
+                        )}
 
-                        {/* Level Selector */}
-                        <div className="mb-3">
-                          <p className="font-pixel text-[10px] opacity-70 mb-2">LEVEL</p>
-                          <div className="flex gap-2">
-                            {(["characters", "words", "both"] as const).map((lvl) => (
-                              <PixelButton
-                                key={lvl}
-                                size="sm"
-                                variant={evalSettingsMap[cls._id]?.level === lvl ? "accent" : "secondary"}
+                        {/* 👩‍🎓 Enrolled Students */}
+                        <h3 className="font-pixel text-sm mb-3 flex items-center gap-2 mt-4">
+                          <Users size={16} /> Enrolled Students
+                        </h3>
+                        {studentsMap[cls._id]?.length > 0 ? (
+                          <ul className="space-y-2">
+                            {studentsMap[cls._id].map((student, idx) => (
+                              <li
+                                key={student._id}
+                                className="font-pixel text-xs flex justify-between items-center bg-white/10 p-2 rounded-md cursor-pointer hover:bg-white/20 transition-colors"
                                 onClick={() =>
+                                  setAnalyticsModal({
+                                    open: true,
+                                    studentId: student._id,
+                                    studentName: student.name || "Unnamed Student",
+                                    classroomId: cls._id,
+                                  })
+                                }
+                              >
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={resolveProfileImage(student.profilePicture) || fallbackProfilePic}
+                                    alt="Avatar"
+                                    className="w-8 h-8 rounded-md border border-white/20 object-cover image-render-pixel"
+                                  />
+                                  <span>{student.name || "Unnamed Student"}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="opacity-70 text-[10px]">
+                                    {student.email}
+                                  </span>
+                                  <BarChart3 size={14} className="opacity-60" />
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="font-pixel text-xs text-center opacity-70 py-2">
+                            📭 No students joined yet.
+                          </p>
+                        )}
+
+                        {/* Activity Settings Panel */}
+                        <div className="mt-6 border-t border-white/20 pt-4">
+                          <h3 className="font-pixel text-sm mb-3 flex items-center gap-2">
+                            <Settings size={16} /> Activity Settings
+                          </h3>
+
+                          {/* Level Selector */}
+                          <div className="mb-3">
+                            <p className="font-pixel text-[10px] opacity-70 mb-2">LEVEL</p>
+                            <div className="flex gap-2">
+                              {(["characters", "words", "both"] as const).map((lvl) => (
+                                <PixelButton
+                                  key={lvl}
+                                  size="sm"
+                                  variant={evalSettingsMap[cls._id]?.level === lvl ? "accent" : "secondary"}
+                                  onClick={() =>
+                                    setEvalSettingsMap((prev) => ({
+                                      ...prev,
+                                      [cls._id]: { ...prev[cls._id], level: lvl },
+                                    }))
+                                  }
+                                  disabled={evalSettingsMap[cls._id]?.isActive}
+                                >
+                                  {lvl === "characters" ? "Letters" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                                </PixelButton>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Session Open Duration */}
+                          <div className="mb-3">
+                            <p className="font-pixel text-[10px] opacity-70 mb-2">
+                              <Clock size={12} className="inline mr-1" />
+                              SESSION OPEN DURATION:
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={5}
+                                max={60}
+                                value={evalSettingsMap[cls._id]?.proctorTimerMinutes || 30}
+                                onChange={(e) => {
+                                  const val = Math.min(60, Math.max(5, Number(e.target.value) || 5));
                                   setEvalSettingsMap((prev) => ({
                                     ...prev,
-                                    [cls._id]: { ...prev[cls._id], level: lvl },
-                                  }))
-                                }
+                                    [cls._id]: { ...prev[cls._id], proctorTimerMinutes: val },
+                                  }));
+                                }}
                                 disabled={evalSettingsMap[cls._id]?.isActive}
-                              >
-                                {lvl === "characters" ? "Letters" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
-                              </PixelButton>
-                            ))}
+                                className="w-20 px-2 py-1 rounded-md font-pixel text-sm text-black bg-white/90 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <span className="font-pixel text-xs opacity-70">minutes</span>
+                            </div>
+                            <p className="font-pixel text-[9px] opacity-50 mt-1">
+                              Min: 5 minutes | Max: 60 minutes
+                            </p>
+                          </div>
+
+                          {/* Activate/Deactivate Toggle */}
+                          <div className="flex items-center gap-3">
+                            <PixelButton
+                              variant={evalSettingsMap[cls._id]?.isActive ? "red" : "green"}
+                              onClick={() => toggleEvaluation(cls._id)}
+                            >
+                              {evalSettingsMap[cls._id]?.isActive
+                                ? "Deactivate"
+                                : "Activate Activity"}
+                            </PixelButton>
+
+                            {evalSettingsMap[cls._id]?.isActive && evalCountdowns[cls._id] !== undefined && (
+                              <span className="font-pixel text-sm animate-pulse">
+                                {formatCountdown(evalCountdowns[cls._id])} remaining
+                              </span>
+                            )}
                           </div>
                         </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </PixelCard>
+            ))}
+          </div>
 
-                        {/* Session Open Duration */}
-                        <div className="mb-3">
-                          <p className="font-pixel text-[10px] opacity-70 mb-2">
-                            <Clock size={12} className="inline mr-1" />
-                            SESSION OPEN DURATION:
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={5}
-                              max={60}
-                              value={evalSettingsMap[cls._id]?.proctorTimerMinutes || 30}
-                              onChange={(e) => {
-                                const val = Math.min(60, Math.max(5, Number(e.target.value) || 5));
-                                setEvalSettingsMap((prev) => ({
-                                  ...prev,
-                                  [cls._id]: { ...prev[cls._id], proctorTimerMinutes: val },
-                                }));
-                              }}
-                              disabled={evalSettingsMap[cls._id]?.isActive}
-                              className="w-20 px-2 py-1 rounded-md font-pixel text-sm text-black bg-white/90 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <span className="font-pixel text-xs opacity-70">minutes</span>
-                          </div>
-                          <p className="font-pixel text-[9px] opacity-50 mt-1">
-                            Min: 5 minutes | Max: 60 minutes
-                          </p>
-                        </div>
-
-                        {/* Activate/Deactivate Toggle */}
-                        <div className="flex items-center gap-3">
-                          <PixelButton
-                            variant={evalSettingsMap[cls._id]?.isActive ? "red" : "green"}
-                            onClick={() => toggleEvaluation(cls._id)}
-                          >
-                            {evalSettingsMap[cls._id]?.isActive
-                              ? "Deactivate"
-                              : "Activate Activity"}
-                          </PixelButton>
-
-                          {evalSettingsMap[cls._id]?.isActive && evalCountdowns[cls._id] !== undefined && (
-                            <span className="font-pixel text-sm animate-pulse">
-                              {formatCountdown(evalCountdowns[cls._id])} remaining
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </PixelCard>
-          ))}
-        </div>
-
-        {classrooms.length === 0 && (
-          <p className="text-center text-muted-foreground mt-10">
-            No classrooms yet. Create one above!
-          </p>
-        )}
+          {classrooms.length === 0 && (
+            <p className="text-center text-muted-foreground mt-10">
+              No classrooms yet. Create one above!
+            </p>
+          )}
         </div>
       </div>
 

@@ -19,7 +19,7 @@ import {
 import { useAudio } from "@/contexts/AudioContext";
 import bgVideo from "@/assets/bg2.mp4";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const MODULE_TITLES: Record<number, string> = {
   1: "Home Row Heroes",
@@ -109,7 +109,7 @@ export default function LearnSession() {
   useEffect(() => {
     const fetchDrills = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/learn/module/${moduleId}`);
+        const res = await fetch(`${API_BASE}/learn/module/${moduleId}`);
         const data = await res.json();
         if (data && data.drills) {
           setDrills(data.drills);
@@ -234,7 +234,7 @@ export default function LearnSession() {
           keyPositionsRef.current,
           {
             onDetection: handleDetectionEvent,
-            onFrame: () => {},
+            onFrame: () => { },
             onError: (err) => { setDetectionError(err.message); setDetecting(false); },
           },
           videoRef.current!,
@@ -402,7 +402,7 @@ export default function LearnSession() {
 
     if (token) {
       try {
-        await fetch(`${BASE_URL}/api/student/learning-progress`, {
+        await fetch(`${API_BASE}/student/learning-progress`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -471,23 +471,23 @@ export default function LearnSession() {
 
       {/* Main Content Card */}
       <div className="w-full max-w-[1200px] rounded-xl border border-white/20 shadow-2xl bg-black/30 backdrop-blur-md overflow-hidden flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 bg-black/40 backdrop-blur-sm shrink-0">
-            <div className="flex items-center gap-3">
-              <PixelButton variant="secondary" size="sm" onClick={() => { handleStopDetection(); navigate("/student/learn"); }}>
-                <ArrowLeft size={18} />
-              </PixelButton>
-              <Logo />
-            </div>
-            <div className="bg-black/60 border-2 border-yellow-400 rounded-lg px-4 py-2 backdrop-blur-sm">
-              <h1 className="font-pixel text-lg text-yellow-300">
-                Module {moduleId}: {MODULE_TITLES[moduleId]}
-              </h1>
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 bg-black/40 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-3">
+            <PixelButton variant="secondary" size="sm" onClick={() => { handleStopDetection(); navigate("/student/learn"); }}>
+              <ArrowLeft size={18} />
+            </PixelButton>
+            <Logo />
           </div>
+          <div className="bg-black/60 border-2 border-yellow-400 rounded-lg px-4 py-2 backdrop-blur-sm">
+            <h1 className="font-pixel text-lg text-yellow-300">
+              Module {moduleId}: {MODULE_TITLES[moduleId]}
+            </h1>
+          </div>
+        </div>
 
-          {/* Main Content Area */}
-          <div className="p-4 flex-1 overflow-auto">
+        {/* Main Content Area */}
+        <div className="p-4 flex-1 overflow-auto">
 
           {!moduleComplete ? (
             <>
@@ -564,9 +564,8 @@ export default function LearnSession() {
 
                   {/* Drill display with character-level feedback */}
                   {calibrationDone && currentDrill && (
-                    <PixelCard className={`w-full max-w-md bg-black/60 border-2 border-yellow-300 backdrop-blur-sm ${
-                      charFeedback[currentCharIndex] === "incorrect" ? "animate-shake" : ""
-                    }`}>
+                    <PixelCard className={`w-full max-w-md bg-black/60 border-2 border-yellow-300 backdrop-blur-sm ${charFeedback[currentCharIndex] === "incorrect" ? "animate-shake" : ""
+                      }`}>
                       <div className="font-pixel text-xl text-center tracking-[0.3em] py-2">
                         {currentDrill.split("").map((ch, i) => {
                           let colorClass = "text-gray-500";
@@ -644,8 +643,8 @@ export default function LearnSession() {
                   {accuracyPercent >= 90
                     ? "Excellent work! You're mastering these keys!"
                     : accuracyPercent >= 70
-                    ? "Good job! Keep practicing for even better accuracy."
-                    : "Keep practicing! Focus on using the correct fingers."}
+                      ? "Good job! Keep practicing for even better accuracy."
+                      : "Keep practicing! Focus on using the correct fingers."}
                 </p>
                 <div className="grid grid-cols-3 gap-4 mb-6">
                   <PixelCard className="bg-black/40 border border-yellow-400 text-center">
@@ -667,8 +666,8 @@ export default function LearnSession() {
               </PixelCard>
             </div>
           )}
-          </div>
         </div>
+      </div>
     </div>
   );
 }

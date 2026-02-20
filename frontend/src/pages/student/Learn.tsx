@@ -53,7 +53,7 @@ const DEFAULT_PROGRESS: Record<number, { completed: boolean }> = {
   5: { completed: false },
 };
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function Learn() {
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ export default function Learn() {
       }
 
       try {
-        const res = await fetch(`${BASE_URL}/api/student/learning-progress`, {
+        const res = await fetch(`${API_BASE}/student/learning-progress`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -144,7 +144,7 @@ export default function Learn() {
     const token = localStorage.getItem("token");
     if (token) {
       try {
-        await fetch(`${BASE_URL}/api/student/learning-progress/reset`, {
+        await fetch(`${API_BASE}/student/learning-progress/reset`, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -197,61 +197,60 @@ export default function Learn() {
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {dynamicModules.map((module) => (
-                <TooltipProvider key={module.id}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <PixelCard
-                          variant={module.unlocked ? "yellow" : "default"}
-                          className={`relative transition-all duration-200 ${
-                            module.unlocked
-                              ? "cursor-pointer hover:brightness-110"
-                              : "opacity-50 cursor-not-allowed"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-pixel text-lg text-black">
-                              {module.title}
-                            </h3>
-                            {module.completed && (
-                              <CheckCircle2
-                                className="text-green-600 drop-shadow-sm"
-                                size={24}
-                              />
-                            )}
-                            {!module.unlocked && (
-                              <Lock className="text-black/60" size={24} />
-                            )}
-                          </div>
-
-                          <p className="font-pixel text-xs text-black/70 mb-1">
-                            {module.focusKeys}
-                          </p>
-
-                          <p className="font-pixel text-xs text-black mb-4">
-                            {module.description}
-                          </p>
-
-                          <PixelButton
-                            variant={module.unlocked ? "learn" : "primary"}
-                            size="sm"
-                            className="w-full"
-                            disabled={!module.unlocked}
-                            onClick={() => handleStartModule(module)}
+                  <TooltipProvider key={module.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <PixelCard
+                            variant={module.unlocked ? "yellow" : "default"}
+                            className={`relative transition-all duration-200 ${module.unlocked
+                                ? "cursor-pointer hover:brightness-110"
+                                : "opacity-50 cursor-not-allowed"
+                              }`}
                           >
-                            {module.completed ? "Review" : "Start"}
-                          </PixelButton>
-                        </PixelCard>
-                      </div>
-                    </TooltipTrigger>
-                    {!module.unlocked && (
-                      <TooltipContent className="font-pixel text-xs bg-black/90 text-yellow-300 border-2 border-yellow-400">
-                        <p>🔒 Complete Module {module.id - 1} first to unlock this module</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-              ))}
+                            <div className="flex items-start justify-between mb-2">
+                              <h3 className="font-pixel text-lg text-black">
+                                {module.title}
+                              </h3>
+                              {module.completed && (
+                                <CheckCircle2
+                                  className="text-green-600 drop-shadow-sm"
+                                  size={24}
+                                />
+                              )}
+                              {!module.unlocked && (
+                                <Lock className="text-black/60" size={24} />
+                              )}
+                            </div>
+
+                            <p className="font-pixel text-xs text-black/70 mb-1">
+                              {module.focusKeys}
+                            </p>
+
+                            <p className="font-pixel text-xs text-black mb-4">
+                              {module.description}
+                            </p>
+
+                            <PixelButton
+                              variant={module.unlocked ? "learn" : "primary"}
+                              size="sm"
+                              className="w-full"
+                              disabled={!module.unlocked}
+                              onClick={() => handleStartModule(module)}
+                            >
+                              {module.completed ? "Review" : "Start"}
+                            </PixelButton>
+                          </PixelCard>
+                        </div>
+                      </TooltipTrigger>
+                      {!module.unlocked && (
+                        <TooltipContent className="font-pixel text-xs bg-black/90 text-yellow-300 border-2 border-yellow-400">
+                          <p>🔒 Complete Module {module.id - 1} first to unlock this module</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
               </div>
             )}
           </div>

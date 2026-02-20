@@ -12,7 +12,7 @@ import { resolveProfileImage } from "@/utils/profileAssets";
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 import bgVideo from "@/assets/b4.mp4";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ export default function StudentDashboard() {
       const token = localStorage.getItem("token");
       try {
         const res = await fetch(
-          `${BASE_URL}/api/student/my-classrooms`,
+          `${API_BASE}/student/my-classrooms`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
