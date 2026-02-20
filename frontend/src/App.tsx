@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { AudioProvider } from "@/contexts/AudioContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // 🔹 Pages
 import Auth from "./pages/Auth";
@@ -32,6 +33,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <ErrorBoundary>
       <BrowserRouter>
         <Routes>
           {/* 🔹 Authentication */}
@@ -68,6 +70,7 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+      </ErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>
 );

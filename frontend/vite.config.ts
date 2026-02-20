@@ -6,13 +6,17 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"), // ✅ alias for "@/..."
+      "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    exclude: ["onnxruntime-web"],
+  },
+  assetsInclude: ["**/*.onnx"],
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:5000", // 🔹 your backend server
+        target: "http://localhost:5000",
         changeOrigin: true,
         secure: false,
       },

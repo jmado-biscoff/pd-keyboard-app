@@ -17,6 +17,8 @@ import {
   Cell,
 } from "recharts";
 
+const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+
 interface StudentAnalyticsModalProps {
   open: boolean;
   onClose: () => void;
@@ -209,7 +211,7 @@ export default function StudentAnalyticsModal({
       setLoading(true);
       try {
         const res = await fetch(
-          `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}/student/${studentId}/results`,
+          `${BASE_URL}/api/teacher/classroom/${classroomId}/student/${studentId}/results`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.ok) {

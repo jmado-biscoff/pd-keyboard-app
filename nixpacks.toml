@@ -1,0 +1,12 @@
+[phases.install]
+cmds = [
+  "npm install",
+  "cd frontend && npm install && cd ..",
+  "cd backend && npm install && cd .."
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && npm run build && cd ..",
+  "cd backend && npx tsc && cd .."
+]

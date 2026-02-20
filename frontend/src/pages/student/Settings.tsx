@@ -14,6 +14,8 @@ import {
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 import { useAudio } from "@/contexts/AudioContext";
 
+const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+
 // Import about_us assets
 import schoolLogo from "@/assets/about_us/school_logo .jpeg";
 import pornobiPhoto from "@/assets/about_us/pornobi.png";
@@ -106,7 +108,7 @@ export default function Settings() {
 
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/student/join-classroom`,
+        `${BASE_URL}/api/student/join-classroom`,
         {
           method: "POST",
           headers: {

@@ -8,12 +8,14 @@ import { CalibrationOverlay } from "@/components/CalibrationOverlay";
 import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { VideoFeed } from "@/components/VideoFeed";
 import { KEYBOARD_IMAGES } from "@/utils/keyboardImages";
+import { getKeyColor, getCorrectionTip } from "@/utils/typingHelpers";
+import { runCalibration } from "@/utils/calibrationClient";
 import {
-  startDetection,
-  stopDetection,
-  getKeyColor,
-  getCorrectionTip,
-} from "@/utils/typingHelpers";
+  initModels,
+  startClientDetection,
+  stopClientDetection,
+  disposeAll,
+} from "@/utils/detectionOrchestrator";
 import { useAudio } from "@/contexts/AudioContext";
 import bgVideo from "@/assets/bg2.mp4";
 
@@ -68,7 +70,7 @@ export default function LearnSession() {
   // Completion
   const [moduleComplete, setModuleComplete] = useState(false);
 
-  // Refs for SSE handler (avoid stale closures)
+  // Refs for detection handler (avoid stale closures)
   const drillsRef = useRef<string[]>([]);
   const currentDrillIndexRef = useRef(0);
   const currentCharIndexRef = useRef(0);
@@ -79,6 +81,13 @@ export default function LearnSession() {
   const lastEventRef = useRef("");
   const calibrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Client-side detection refs
+  const calibrationStopRef = useRef<(() => void) | null>(null);
+  const keyPositionsRef = useRef<Record<string, number[]>>({});
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const modelsInitializedRef = useRef(false);
 
   // Sync refs
   useEffect(() => { drillsRef.current = drills; }, [drills]);
@@ -104,15 +113,6 @@ export default function LearnSession() {
         const data = await res.json();
         if (data && data.drills) {
           setDrills(data.drills);
-          // Send expected keys to detection backend
-          await fetch(`${BASE_URL}/api/detect/set-expected`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              words: data.drills,
-              startIndex: 0,
-            }),
-          });
         }
       } catch (error) {
         console.error("Error fetching learn drills:", error);
@@ -130,189 +130,126 @@ export default function LearnSession() {
   }, [showCalibrationComplete]);
 
   // ============================================================
-  // SSE Connection for detection events
+  // Detection event handler (called by orchestrator callbacks)
   // ============================================================
-  useEffect(() => {
-    if (!detecting || moduleComplete) return;
+  const handleDetectionEvent = (data: {
+    type: "detection";
+    key: string;
+    finger: string;
+    hand: string;
+    expected_key: string | null;
+    ml_label: "Correct" | "Incorrect";
+    fingertip_count: number;
+    left_fingers_count: number;
+    right_fingers_count: number;
+  }) => {
+    if (!data.key) return;
+    const key = String(data.key).toUpperCase();
+    if (!/^[A-Z]$/.test(key)) return;
+    if (isCalibratingRef.current) return;
 
-    const source = new EventSource(`${BASE_URL}/api/detect/stream`);
+    const currentDrills = drillsRef.current;
+    const dIdx = currentDrillIndexRef.current;
+    const cIdx = currentCharIndexRef.current;
 
-    source.onmessage = (event: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(event.data);
+    if (dIdx >= currentDrills.length) return;
+    const currentDrillText = currentDrills[dIdx];
+    if (!currentDrillText || cIdx >= currentDrillText.length) return;
 
-        switch (data.type) {
-          case "calibration_progress":
-            setFrame(data.frame || null);
-            setCalibrationProgress({
-              detected: data.detected,
-              required: data.required,
-            });
-            if (Array.isArray(data.detected_keys)) {
-              setCalibratedKeys(data.detected_keys.map((k: string) => k.toUpperCase()));
-            }
-            break;
+    const expectedChar = currentDrillText[cIdx].toUpperCase();
 
-          case "calibration_done": {
-            if (!calibrationDoneRef.current) {
-              if (calibrationTimeoutRef.current) {
-                clearTimeout(calibrationTimeoutRef.current);
-                calibrationTimeoutRef.current = null;
-              }
+    // Duplicate prevention
+    const signature = `${key}-${dIdx}-${cIdx}`;
+    if (lastEventRef.current === signature) return;
+    lastEventRef.current = signature;
 
-              const keysDetected = data.locked_keys || 0;
-              if (keysDetected < 26) {
-                setDetectionError("Calibration incomplete - not all keys detected. Please realign your keyboard.");
-                setIsCalibrating(false);
-                return;
-              }
+    const mlCorrect = data.ml_label === "Correct";
+    const keyCorrect = key === expectedChar;
+    const isFullyCorrect = mlCorrect && keyCorrect;
 
-              calibrationDoneRef.current = true;
-              setCalibrationDone(true);
-              setIsCalibrating(false);
-              setShowCalibrationComplete(true);
-            }
-            break;
-          }
+    // Visual feedback on VirtualKeyboard
+    const color = getKeyColor(key, expectedChar, data.ml_label);
+    setActiveKeys({ [key]: color });
+    setTimeout(() => setActiveKeys({}), 300);
 
-          case "error":
-            setDetectionError(data.message);
-            setDetecting(false);
-            if (calibrationTimeoutRef.current) {
-              clearTimeout(calibrationTimeoutRef.current);
-              calibrationTimeoutRef.current = null;
-            }
-            break;
+    if (isFullyCorrect) {
+      correctCountRef.current++;
+      setCorrectCount(correctCountRef.current);
+      setLastTip(null);
+      playCorrectSound();
 
-          case "frame":
-            setFrame(data.frame || null);
-            break;
+      setCharFeedback((prev) => ({ ...prev, [cIdx]: "correct" }));
 
-          case "detection": {
-            if (!data.key) return;
-            const key = String(data.key).toUpperCase();
-            if (!/^[A-Z]$/.test(key)) return;
-            if (isCalibratingRef.current) return;
-
-            const currentDrills = drillsRef.current;
-            const dIdx = currentDrillIndexRef.current;
-            const cIdx = currentCharIndexRef.current;
-
-            if (dIdx >= currentDrills.length) return;
-            const currentDrill = currentDrills[dIdx];
-            if (!currentDrill || cIdx >= currentDrill.length) return;
-
-            const expectedChar = currentDrill[cIdx].toUpperCase();
-
-            // Duplicate prevention
-            const signature = `${key}-${dIdx}-${cIdx}`;
-            if (lastEventRef.current === signature) return;
-            lastEventRef.current = signature;
-
-            const mlCorrect = data.ml_label === "Correct";
-            const keyCorrect = key === expectedChar;
-
-            // ✅ NEW: Only proceed if BOTH key AND finger are correct
-            const isFullyCorrect = mlCorrect && keyCorrect;
-
-            // Visual feedback on VirtualKeyboard
-            const color = getKeyColor(key, expectedChar, data.ml_label);
-            setActiveKeys({ [key]: color });
-            setTimeout(() => setActiveKeys({}), 300);
-
-            if (isFullyCorrect) {
-              // ✅ CORRECT: Update counts and advance
-              correctCountRef.current++;
-              setCorrectCount(correctCountRef.current);
-              setLastTip(null);
-              playCorrectSound();
-
-              // Update char feedback for drill display
-              setCharFeedback((prev) => ({
-                ...prev,
-                [cIdx]: "correct",
-              }));
-
-              // Advance character pointer
-              const nextCharIndex = cIdx + 1;
-              if (nextCharIndex >= currentDrill.length) {
-                // Drill complete — advance to next
-                const nextDrillIndex = dIdx + 1;
-                if (nextDrillIndex >= currentDrills.length) {
-                  setModuleComplete(true);
-                } else {
-                  currentDrillIndexRef.current = nextDrillIndex;
-                  currentCharIndexRef.current = 0;
-                  setCurrentDrillIndex(nextDrillIndex);
-                  setCurrentCharIndex(0);
-                  setCharFeedback({});
-                  setLastTip(null);
-
-                  // Update expected keys for new drill
-                  fetch(`${BASE_URL}/api/detect/set-expected`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      words: currentDrills.slice(nextDrillIndex),
-                      startIndex: 0,
-                    }),
-                  });
-                }
-              } else {
-                currentCharIndexRef.current = nextCharIndex;
-                setCurrentCharIndex(nextCharIndex);
-              }
-            } else {
-              // ❌ INCORRECT: Do NOT advance, show feedback
-              incorrectCountRef.current++;
-              setIncorrectCount(incorrectCountRef.current);
-              playErrorSound();
-
-              // Show specific error message
-              if (!keyCorrect && !mlCorrect) {
-                setLastTip(`Wrong key AND wrong finger! Expected: ${expectedChar}. ${getCorrectionTip(expectedChar)}`);
-              } else if (!keyCorrect) {
-                setLastTip(`Wrong key! Expected: ${expectedChar}`);
-              } else if (!mlCorrect) {
-                setLastTip(`Wrong finger! ${getCorrectionTip(expectedChar)}`);
-              }
-
-              // Flash the incorrect character in red
-              setCharFeedback((prev) => ({
-                ...prev,
-                [cIdx]: "incorrect",
-              }));
-
-              // Clear the incorrect feedback after a short delay
-              setTimeout(() => {
-                setCharFeedback((prev) => {
-                  const updated = { ...prev };
-                  delete updated[cIdx];
-                  return updated;
-                });
-              }, 500);
-            }
-            break;
-          }
+      const nextCharIndex = cIdx + 1;
+      if (nextCharIndex >= currentDrillText.length) {
+        const nextDrillIndex = dIdx + 1;
+        if (nextDrillIndex >= currentDrills.length) {
+          setModuleComplete(true);
+        } else {
+          currentDrillIndexRef.current = nextDrillIndex;
+          currentCharIndexRef.current = 0;
+          setCurrentDrillIndex(nextDrillIndex);
+          setCurrentCharIndex(0);
+          setCharFeedback({});
+          setLastTip(null);
         }
+      } else {
+        currentCharIndexRef.current = nextCharIndex;
+        setCurrentCharIndex(nextCharIndex);
+      }
+    } else {
+      incorrectCountRef.current++;
+      setIncorrectCount(incorrectCountRef.current);
+      playErrorSound();
+
+      if (!keyCorrect && !mlCorrect) {
+        setLastTip(`Wrong key AND wrong finger! Expected: ${expectedChar}. ${getCorrectionTip(expectedChar)}`);
+      } else if (!keyCorrect) {
+        setLastTip(`Wrong key! Expected: ${expectedChar}`);
+      } else if (!mlCorrect) {
+        setLastTip(`Wrong finger! ${getCorrectionTip(expectedChar)}`);
+      }
+
+      setCharFeedback((prev) => ({ ...prev, [cIdx]: "incorrect" }));
+
+      setTimeout(() => {
+        setCharFeedback((prev) => {
+          const updated = { ...prev };
+          delete updated[cIdx];
+          return updated;
+        });
+      }, 500);
+    }
+  };
+
+  // Start client-side detection after calibration completes and VideoFeed renders detection refs
+  useEffect(() => {
+    if (!calibrationDone || !detecting) return;
+    if (!videoRef.current || !canvasRef.current) return;
+    if (Object.keys(keyPositionsRef.current).length === 0) return;
+
+    const startDetect = async () => {
+      try {
+        await startClientDetection(
+          keyPositionsRef.current,
+          {
+            onDetection: handleDetectionEvent,
+            onFrame: () => {},
+            onError: (err) => { setDetectionError(err.message); setDetecting(false); },
+          },
+          videoRef.current!,
+          canvasRef.current!
+        );
       } catch (err) {
-        console.error("LearnSession SSE parse error:", err);
+        console.error("Failed to start client detection:", err);
+        setDetectionError("Failed to start typing detection. Please retry.");
       }
     };
-
-    source.onerror = () => {
-      if (source.readyState === EventSource.CLOSED) {
-        console.error("LearnSession SSE connection closed");
-      }
-    };
-
-    return () => {
-      source.close();
-    };
-  }, [detecting, moduleComplete]);
+    startDetect();
+  }, [calibrationDone, detecting]);
 
   // ============================================================
-  // Start detection on mount
+  // Start detection (calibration → client-side detection)
   // ============================================================
   const handleStartDetection = async () => {
     try {
@@ -330,80 +267,119 @@ export default function LearnSession() {
         clearTimeout(calibrationTimeoutRef.current);
       }
 
-      // Send expected keys before starting detection
-      if (drillsRef.current.length > 0) {
-        await fetch(`${BASE_URL}/api/detect/set-expected`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            words: drillsRef.current,
-            startIndex: 0,
-          }),
-        });
+      // Initialize ML models (SVM + MediaPipe) in parallel
+      if (!modelsInitializedRef.current) {
+        await initModels();
+        modelsInitializedRef.current = true;
       }
 
-      calibrationTimeoutRef.current = setTimeout(() => {
-        if (!calibrationDoneRef.current) {
-          setDetectionError("No keyboard detected. Please ensure your keyboard is visible to the camera.");
+      // Create temporary video element for calibration
+      const tempVideo = document.createElement("video");
+      tempVideo.autoplay = true;
+      tempVideo.playsInline = true;
+      tempVideo.muted = true;
+      tempVideo.style.display = "none";
+      document.body.appendChild(tempVideo);
+
+      const { stop, stream } = await runCalibration(
+        tempVideo,
+        // onProgress
+        (progress) => {
+          setFrame(progress.annotated_frame || null);
+          setCalibrationProgress({
+            detected: progress.detected,
+            required: progress.required,
+          });
+          if (Array.isArray(progress.detected_keys)) {
+            setCalibratedKeys(progress.detected_keys.map((k: string) => k.toUpperCase()));
+          }
+        },
+        // onComplete
+        async (keyPositions) => {
+          if (calibrationTimeoutRef.current) {
+            clearTimeout(calibrationTimeoutRef.current);
+            calibrationTimeoutRef.current = null;
+          }
+
+          // Stop calibration camera
+          stream.getTracks().forEach((t) => t.stop());
+          tempVideo.remove();
+          calibrationStopRef.current = null;
+
+          keyPositionsRef.current = keyPositions;
+          calibrationDoneRef.current = true;
+          setCalibrationDone(true);
+          setIsCalibrating(false);
+          setShowCalibrationComplete(true);
+          setDetecting(true);
+
+          // Client detection will be started by useEffect after VideoFeed re-renders with detection refs
+        },
+        // onError
+        (msg) => {
+          stream.getTracks().forEach((t) => t.stop());
+          tempVideo.remove();
+          calibrationStopRef.current = null;
+          setDetectionError(msg);
           setIsCalibrating(false);
         }
-      }, 15000);
+      );
 
-      await startDetection();
-      setDetecting(true);
+      calibrationStopRef.current = stop;
     } catch (err) {
       console.error("Failed to start detection:", err);
       setIsCalibrating(false);
+      setDetectionError("Failed to start camera. Please check permissions.");
     }
   };
 
-  const handleStopDetection = async () => {
-    try {
-      await stopDetection();
-    } catch (err) {
-      console.error("Failed to stop detection:", err);
-    } finally {
-      setDetecting(false);
+  const handleStopDetection = () => {
+    if (calibrationStopRef.current) {
+      calibrationStopRef.current();
+      calibrationStopRef.current = null;
     }
+    stopClientDetection();
+    setDetecting(false);
   };
 
   // Recalibrate
   const handleRecalibrate = async () => {
-    try {
-      setFrame(null);
-      setCalibrationProgress({ detected: 0, required: 26 });
-      setActiveKeys({});
-      setCalibratedKeys([]);
-      setCalibrationDone(false);
-      setShowCalibrationComplete(false);
-      setIsCalibrating(true);
-      calibrationDoneRef.current = false;
-      setDetecting(false);
+    setFrame(null);
+    setCalibrationProgress({ detected: 0, required: 26 });
+    setActiveKeys({});
+    setCalibratedKeys([]);
+    setCalibrationDone(false);
+    setShowCalibrationComplete(false);
+    calibrationDoneRef.current = false;
 
-      if (detecting) await stopDetection();
-
-      // Cool-down for clean camera release
-      await new Promise((r) => setTimeout(r, 1000));
-      await handleStartDetection();
-    } catch (err) {
-      console.error("Recalibration failed:", err);
-      setIsCalibrating(false);
+    if (calibrationStopRef.current) {
+      calibrationStopRef.current();
+      calibrationStopRef.current = null;
     }
+    stopClientDetection();
+    setDetecting(false);
+
+    // Brief cool-down for clean camera release
+    await new Promise((r) => setTimeout(r, 500));
+    await handleStartDetection();
   };
 
   // Auto-start detection on mount
   useEffect(() => {
-    // Mute background music during learn session
     muteMusicTemporarily(true);
 
     const start = async () => await handleStartDetection();
     start();
 
     return () => {
-      // Unmute background music when leaving
-      muteMusicTemporarily(false);
-      void handleStopDetection();
-      if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current);
+      try {
+        muteMusicTemporarily(false);
+        disposeAll(); // Full cleanup: stop detection + dispose ML models on unmount
+        if (calibrationStopRef.current) calibrationStopRef.current();
+        if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current);
+      } catch (err) {
+        console.error("LearnSession cleanup error:", err);
+      }
     };
   }, []);
 
@@ -424,7 +400,6 @@ export default function LearnSession() {
   const handleFinish = async () => {
     const token = localStorage.getItem("token");
 
-    // Save to backend
     if (token) {
       try {
         await fetch(`${BASE_URL}/api/student/learning-progress`, {
@@ -444,7 +419,6 @@ export default function LearnSession() {
       }
     }
 
-    // Also update localStorage as cache
     const saved = JSON.parse(localStorage.getItem("typingModuleProgress") || "{}");
     saved[moduleId] = { completed: true, accuracy: accuracyPercent };
     localStorage.setItem("typingModuleProgress", JSON.stringify(saved));
@@ -458,6 +432,9 @@ export default function LearnSession() {
   const keyboardImage = targetChar ? KEYBOARD_IMAGES[targetChar] : null;
   const totalChars = correctCount + incorrectCount;
   const accuracyPercent = totalChars > 0 ? Math.round((correctCount / totalChars) * 100) : 100;
+
+  // Determine VideoFeed mode
+  const videoFeedMode = isCalibrating ? "calibration" : calibrationDone && detecting ? "detection" : "idle";
 
   return (
     <div className="min-h-screen flex items-start justify-center p-4 pt-6 relative">
@@ -521,21 +498,23 @@ export default function LearnSession() {
                   {/* Live Feed Label */}
                   <div className="bg-black/50 border-2 border-blue-400 rounded-lg px-4 py-2 backdrop-blur-sm">
                     <p className="font-pixel text-sm text-blue-300 text-center uppercase tracking-wider">
-                      📹 Live Feed
+                      Live Feed
                     </p>
                   </div>
 
                   <VideoFeed
-                    detecting={detecting}
+                    mode={videoFeedMode}
+                    calibrationFrame={frame}
+                    videoRef={videoRef}
+                    canvasRef={canvasRef}
                     calibrationDone={calibrationDone}
-                    baseUrl={BASE_URL}
                   />
 
                   {/* Incorrect Key Press Feedback */}
                   {lastTip && calibrationDone && (
                     <div className="bg-red-500/90 border-2 border-red-600 rounded-lg p-4 shadow-lg backdrop-blur-sm animate-in fade-in duration-300">
                       <div className="flex items-start gap-3">
-                        <span className="text-2xl">⚠️</span>
+                        <span className="text-2xl">Warning</span>
                         <div className="flex-1">
                           <p className="font-pixel text-xs text-white/80 uppercase tracking-wider mb-1">
                             Correction Needed

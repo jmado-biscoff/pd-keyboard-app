@@ -17,7 +17,19 @@
       "Bash(findstr:*)",
       "Bash(netstat:*)",
       "Bash(ls -la \"e:\\\\prototype\\\\pd-keyboard-app\\\\frontend\\\\src\\\\pages\\\\student\"\" 2>&1 || echo \"Directory not found \")",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(.onnx \")",
+      "Bash(npm install:*)",
+      "Bash(python3:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(if not exist \"e:\\\\prototype\\\\pd-keyboard-app\\\\frontend\\\\public\\\\models\" mkdir \"e:\\\\prototype\\\\pd-keyboard-app\\\\frontend\\\\public\\\\models\")",
+      "Bash(curl:*)",
+      "Bash(copy:*)",
+      "Bash(git -C \"e:\\\\prototype\\\\pd-keyboard-app\" ls-files)",
+      "Bash(git -C \"e:\\\\prototype\\\\pd-keyboard-app\" check-ignore .env backend/.env frontend/.env)",
+      "Bash(git rm:*)"
     ]
   }
 }

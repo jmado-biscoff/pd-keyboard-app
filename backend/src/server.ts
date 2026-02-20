@@ -11,17 +11,24 @@ import authRoutes from "./routes/authRoutes";
 import studentRoutes from "./routes/studentRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import typingRoutes from "./routes/typingRoutes";
-import detectionRouter from "./routes/detectionRoutes";
 import resultsRoutes from "./routes/resultsRoutes";
 import learnRoutes from "./routes/learnRoutes";
 
 // Configuration
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://admin:pd-keyboard-app@cluster0.wuypmob.mongodb.net/";
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error("MONGO_URI environment variable is required. Set it in .env");
+  process.exit(1);
+}
 
 // Middleware
-app.use(cors({ origin: ["http://localhost:5173"], credentials: true }));
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : ["http://localhost:5173"];
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json());
 
 // Routes
@@ -29,15 +36,22 @@ app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/teacher", teacherRoutes);
 app.use("/api/typing", typingRoutes);
-app.use("/api/detect", detectionRouter);
 app.use("/api/results", resultsRoutes);
 app.use("/api/learn", learnRoutes);
-app.use("/api/auth/teacher", teacherRoutes);
-app.use("/api/auth/student", studentRoutes);
 
-app.get("/", (req: Request, res: Response) => {
-  res.send("Typing App Backend is running...");
-});
+// Serve frontend in production
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+  app.get("*", (req: Request, res: Response) => {
+    if (!req.path.startsWith("/api")) {
+      res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
+    }
+  });
+} else {
+  app.get("/", (req: Request, res: Response) => {
+    res.send("Typing App Backend is running...");
+  });
+}
 
 // Database connection
 mongoose

@@ -23,6 +23,8 @@ import bgVideo from "@/assets/b11.mp4";
 import { resolveProfileImage } from "@/utils/profileAssets";
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
+const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+
 export default function Classroom() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -58,7 +60,7 @@ export default function Classroom() {
   const fetchClassrooms = async () => {
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/teacher/my-classrooms`,
+        `${BASE_URL}/api/teacher/my-classrooms`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -121,7 +123,7 @@ export default function Classroom() {
     if (!settings) return;
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}/evaluation`,
+        `${BASE_URL}/api/teacher/classroom/${classroomId}/evaluation`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -141,7 +143,7 @@ export default function Classroom() {
       // Save settings first if activating
       if (activate) await saveEvalSettings(classroomId);
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}/evaluation/activate`,
+        `${BASE_URL}/api/teacher/classroom/${classroomId}/evaluation/activate`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -173,7 +175,7 @@ export default function Classroom() {
   const handleDelete = async (classroomId: string) => {
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/teacher/classroom/${classroomId}`,
+        `${BASE_URL}/api/teacher/classroom/${classroomId}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -196,7 +198,7 @@ export default function Classroom() {
     if (!newClassName.trim()) return toast.error("Enter a classroom name");
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/teacher/create-classroom`,
+        `${BASE_URL}/api/teacher/create-classroom`,
         {
           method: "POST",
           headers: {
@@ -230,17 +232,13 @@ export default function Classroom() {
 
       const [studentsRes, requestsRes] = await Promise.all([
         fetch(
-          `${
-            import.meta.env.VITE_API_URL
-          }/teacher/classroom/${classroomId}/students`,
+          `${BASE_URL}/api/teacher/classroom/${classroomId}/students`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         ),
         fetch(
-          `${
-            import.meta.env.VITE_API_URL
-          }/teacher/classroom/${classroomId}/requests`,
+          `${BASE_URL}/api/teacher/classroom/${classroomId}/requests`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -287,9 +285,7 @@ export default function Classroom() {
   ) => {
     try {
       const res = await fetch(
-        `${
-          import.meta.env.VITE_API_URL
-        }/teacher/classroom/${classId}/${decision}`,
+        `${BASE_URL}/api/teacher/classroom/${classId}/${decision}`,
         {
           method: "POST",
           headers: {

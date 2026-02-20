@@ -141,7 +141,7 @@ export default function Play() {
     if (!token) return;
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/student/my-classrooms`,
+        `${BASE_URL}/api/student/my-classrooms`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) {

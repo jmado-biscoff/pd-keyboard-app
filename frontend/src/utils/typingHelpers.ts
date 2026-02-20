@@ -58,31 +58,3 @@ export const getKeyColor = (
   }
 };
 
-/**
- * Detection API functions
- */
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
-
-export async function startDetection() {
-  const res = await fetch(`${BASE_URL}/api/detect/start`, { method: "POST" });
-  return res.json();
-}
-
-export async function stopDetection() {
-  const res = await fetch(`${BASE_URL}/api/detect/stop`, { method: "POST" });
-  return res.json();
-}
-
-export async function getDetectionStatus() {
-  const res = await fetch(`${BASE_URL}/api/detect/status`);
-  return res.json();
-}
-
-export async function setExpectedKeys(keys: string[]) {
-  const res = await fetch(`${BASE_URL}/api/detect/set-expected`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ expected_keys: keys }),
-  });
-  return res.json();
-}
