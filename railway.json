@@ -1,4 +1,4 @@
 {
   "build": { "builder": "NIXPACKS" },
-  "deploy": { "startCommand": "cd backend && node dist/server.js" }
+  "deploy": { "startCommand": "cd backend && node dist/src/server.js" }
 }
