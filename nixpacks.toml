@@ -8,5 +8,5 @@ cmds = [
 [phases.build]
 cmds = [
   "cd frontend && npm run build && cd ..",
-  "cd backend && npx tsc && cd .."
+  "cd backend && npx tsc && cp -r data dist/data && cd .."
 ]
