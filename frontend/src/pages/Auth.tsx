@@ -26,9 +26,8 @@ export default function Auth() {
     confirmPassword: "",
   });
 
-  // ✅ Use the same URL as backend
-  const API_URL =
-    import.meta.env.VITE_API_URL || "http://localhost:5000/api/auth";
+  // ✅ Use the new base URL from environment variables
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -58,7 +57,7 @@ export default function Auth() {
 
     try {
       const endpoint =
-        authMode === "signup" ? `${API_URL}/register` : `${API_URL}/login`;
+        authMode === "signup" ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
 
       const payload =
         authMode === "signup"

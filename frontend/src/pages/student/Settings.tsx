@@ -14,7 +14,7 @@ import {
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 import { useAudio } from "@/contexts/AudioContext";
 
-const BASE_URL = import.meta.env.VITE_API_URL.replace("/api/auth", "");
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Import about_us assets
 import schoolLogo from "@/assets/about_us/school_logo .jpeg";
@@ -50,9 +50,7 @@ export default function Settings() {
     }
 
     try {
-      const API_URL =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api/auth";
-      const res = await fetch(`${API_URL}/update-profile`, {
+      const res = await fetch(`${API_BASE}/auth/update-profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +106,7 @@ export default function Settings() {
 
     try {
       const res = await fetch(
-        `${BASE_URL}/api/student/join-classroom`,
+        `${API_BASE}/student/join-classroom`,
         {
           method: "POST",
           headers: {
@@ -143,140 +141,140 @@ export default function Settings() {
       />
 
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">
-      <div className="max-w-4xl mx-auto">
-        {/* Back Button + Logo */}
-        <div className="flex items-center gap-4 mb-12">
-          <PixelButton
-            variant="secondary"
-            onClick={() => navigate("/student/dashboard")}
-          >
-            <ArrowLeft size={20} />
-          </PixelButton>
-          <Logo />
-        </div>
+        <div className="max-w-4xl mx-auto">
+          {/* Back Button + Logo */}
+          <div className="flex items-center gap-4 mb-12">
+            <PixelButton
+              variant="secondary"
+              onClick={() => navigate("/student/dashboard")}
+            >
+              <ArrowLeft size={20} />
+            </PixelButton>
+            <Logo />
+          </div>
 
-        <div className="space-y-6">
-          {/* Profile Section */}
-          <PixelCard>
-            <h2 className="font-pixel text-xl mb-4">Profile</h2>
-            <div className="flex items-center gap-4">
-              <img
-                src={profilePic}
-                alt="Profile"
-                className="h-16 w-16 rounded-md border-2 border-black object-cover image-render-pixel"
-              />
-              <div>
-                <p className="font-pixel text-sm text-muted-foreground">
-                  Student Name
-                </p>
-                <p className="font-pixel text-lg">{userName}</p>
+          <div className="space-y-6">
+            {/* Profile Section */}
+            <PixelCard>
+              <h2 className="font-pixel text-xl mb-4">Profile</h2>
+              <div className="flex items-center gap-4">
+                <img
+                  src={profilePic}
+                  alt="Profile"
+                  className="h-16 w-16 rounded-md border-2 border-black object-cover image-render-pixel"
+                />
+                <div>
+                  <p className="font-pixel text-sm text-muted-foreground">
+                    Student Name
+                  </p>
+                  <p className="font-pixel text-lg">{userName}</p>
+                </div>
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={openAvatarModal}
+                  className="ml-auto"
+                >
+                  Edit Avatar
+                </PixelButton>
               </div>
+            </PixelCard>
+
+            {/* Classroom Section */}
+            <PixelCard variant="purple" className="text-white">
+              <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
+                <Users size={24} />
+                Join Classroom
+              </h2>
+              <p className="font-pixel text-xs mb-4 opacity-90">
+                Enter the code provided by your teacher to join their classroom
+              </p>
+              <div className="flex gap-2">
+                <PixelInput
+                  value={classroomCode}
+                  onChange={(e) => setClassroomCode(e.target.value.toUpperCase())}
+                  placeholder="CLASSROOM CODE"
+                  className="flex-1"
+                  maxLength={8}
+                />
+                <PixelButton variant="accent" onClick={handleJoinClassroom}>
+                  Join
+                </PixelButton>
+              </div>
+            </PixelCard>
+
+            {/* Audio Settings Section */}
+            <PixelCard variant="accent" className="text-white">
+              <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
+                <Volume2 size={24} />
+                Audio Settings
+              </h2>
+
+              {/* Background Music Volume */}
+              <div className="mb-6">
+                <label className="font-pixel text-sm mb-2 block">
+                  Background Music: {Math.round(musicVolume * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={musicVolume}
+                  onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer slider"
+                />
+              </div>
+
+              {/* Sound Effects Volume */}
+              <div>
+                <label className="font-pixel text-sm mb-2 block">
+                  Sound Effects: {Math.round(soundVolume * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={soundVolume}
+                  onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer slider"
+                />
+              </div>
+            </PixelCard>
+
+            {/* About Us Section */}
+            <PixelCard variant="yellow" className="text-black">
+              <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
+                <Info size={24} />
+                About
+              </h2>
+              <p className="font-pixel text-xs mb-4 opacity-80">
+                Learn more about the team behind TyPaw
+              </p>
               <PixelButton
-                variant="secondary"
-                size="sm"
-                onClick={openAvatarModal}
-                className="ml-auto"
+                variant="primary"
+                onClick={() => setShowAboutUs(true)}
+                className="w-full"
               >
-                Edit Avatar
+                About Us
               </PixelButton>
-            </div>
-          </PixelCard>
+            </PixelCard>
 
-          {/* Classroom Section */}
-          <PixelCard variant="purple" className="text-white">
-            <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
-              <Users size={24} />
-              Join Classroom
-            </h2>
-            <p className="font-pixel text-xs mb-4 opacity-90">
-              Enter the code provided by your teacher to join their classroom
-            </p>
-            <div className="flex gap-2">
-              <PixelInput
-                value={classroomCode}
-                onChange={(e) => setClassroomCode(e.target.value.toUpperCase())}
-                placeholder="CLASSROOM CODE"
-                className="flex-1"
-                maxLength={8}
-              />
-              <PixelButton variant="accent" onClick={handleJoinClassroom}>
-                Join
+            {/* Logout Section */}
+            <PixelCard variant="orange" className="text-white">
+              <h2 className="font-pixel text-xl mb-4">Account</h2>
+              <PixelButton
+                variant="accent"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2"
+              >
+                <LogOut size={20} />
+                Logout
               </PixelButton>
-            </div>
-          </PixelCard>
-
-          {/* Audio Settings Section */}
-          <PixelCard variant="accent" className="text-white">
-            <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
-              <Volume2 size={24} />
-              Audio Settings
-            </h2>
-
-            {/* Background Music Volume */}
-            <div className="mb-6">
-              <label className="font-pixel text-sm mb-2 block">
-                Background Music: {Math.round(musicVolume * 100)}%
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={musicVolume}
-                onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
-                className="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer slider"
-              />
-            </div>
-
-            {/* Sound Effects Volume */}
-            <div>
-              <label className="font-pixel text-sm mb-2 block">
-                Sound Effects: {Math.round(soundVolume * 100)}%
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={soundVolume}
-                onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
-                className="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer slider"
-              />
-            </div>
-          </PixelCard>
-
-          {/* About Us Section */}
-          <PixelCard variant="yellow" className="text-black">
-            <h2 className="font-pixel text-xl mb-4 flex items-center gap-2">
-              <Info size={24} />
-              About
-            </h2>
-            <p className="font-pixel text-xs mb-4 opacity-80">
-              Learn more about the team behind TyPaw
-            </p>
-            <PixelButton
-              variant="primary"
-              onClick={() => setShowAboutUs(true)}
-              className="w-full"
-            >
-              About Us
-            </PixelButton>
-          </PixelCard>
-
-          {/* Logout Section */}
-          <PixelCard variant="orange" className="text-white">
-            <h2 className="font-pixel text-xl mb-4">Account</h2>
-            <PixelButton
-              variant="accent"
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2"
-            >
-              <LogOut size={20} />
-              Logout
-            </PixelButton>
-          </PixelCard>
+            </PixelCard>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Avatar Selection Modal */}
@@ -292,8 +290,8 @@ export default function Settings() {
                   key={p.key}
                   onClick={() => setTempSelectedProfile(p.key)}
                   className={`rounded-md border-3 overflow-hidden transition-transform hover:scale-105 ${tempSelectedProfile === p.key
-                      ? "border-accent ring-2 ring-accent scale-105"
-                      : "border-black"
+                    ? "border-accent ring-2 ring-accent scale-105"
+                    : "border-black"
                     }`}
                 >
                   <img

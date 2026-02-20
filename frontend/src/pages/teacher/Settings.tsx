@@ -32,9 +32,8 @@ export default function TeacherSettings() {
     }
 
     try {
-      const API_URL =
-        import.meta.env.VITE_API_URL || "http://localhost:5000/api/auth";
-      const res = await fetch(`${API_URL}/update-profile`, {
+      const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${API_BASE}/auth/update-profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -146,11 +145,10 @@ export default function TeacherSettings() {
                 <button
                   key={p.key}
                   onClick={() => setTempSelectedProfile(p.key)}
-                  className={`rounded-md border-3 overflow-hidden transition-transform hover:scale-105 ${
-                    tempSelectedProfile === p.key
+                  className={`rounded-md border-3 overflow-hidden transition-transform hover:scale-105 ${tempSelectedProfile === p.key
                       ? "border-accent ring-2 ring-accent scale-105"
                       : "border-black"
-                  }`}
+                    }`}
                 >
                   <img
                     src={p.src}
