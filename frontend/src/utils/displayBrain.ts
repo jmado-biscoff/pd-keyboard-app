@@ -17,10 +17,14 @@ export type { ErrorHistoryEntry, SessionAnalysis };
  * Analyzes a typing session and returns comprehensive performance metrics
  *
  * @param grossWpm - Gross WPM calculated as: (correct + incorrect) / (5 * minutesElapsed)
- * @param accuracy - Percentage accuracy (0-100)
- * @param correct - Number of correct keystrokes
- * @param incorrect - Number of incorrect keystrokes
+ * @param accuracy - Percentage accuracy (0-100), used only for isPerfect guard
+ * @param correct - Number of fully-correct keystrokes (right key + right finger)
+ * @param incorrect - Number of incorrect keystrokes (wrong key OR wrong finger)
  * @param errorHistory - Array of error details for analysis
+ * @param correctKeysCount - Number of physically-correct key presses (right letter,
+ *   regardless of finger technique). When provided, Accuracy is decoupled from
+ *   technique so a user who hits the right key with the wrong finger scores 100%
+ *   Accuracy but retains a high Error Rate.
  * @returns Complete session analysis with grades, scores, and insights
  */
 export const analyzeSession = (
@@ -28,7 +32,8 @@ export const analyzeSession = (
   accuracy: number,
   correct: number,
   incorrect: number,
-  errorHistory: ErrorHistoryEntry[]
+  errorHistory: ErrorHistoryEntry[],
+  correctKeysCount?: number
 ): SessionAnalysis => {
   const total = correct + incorrect;
   const isPerfect = errorHistory.length === 0 && accuracy === 100;
@@ -47,10 +52,16 @@ export const analyzeSession = (
     ? grossWpm - (incorrect / (minutesElapsed * 5))
     : 0;
 
-  // 3. Accuracy (%)
-  const accuracyPercent = total > 0 ? (correct / total) * 100 : 100;
+  // 3. Accuracy (%) — physical key accuracy, decoupled from finger technique.
+  //    If correctKeysCount is provided, accuracy = correct letters / total keystrokes.
+  //    This means hitting the right letter with the wrong finger scores 100% Accuracy
+  //    while the technique penalty flows entirely through Error Rate (step 4).
+  const accuracyPercent = total > 0
+    ? ((correctKeysCount !== undefined ? correctKeysCount : correct) / total) * 100
+    : 100;
 
-  // 4. Error Rate (%)
+  // 4. Error Rate (%) — includes BOTH wrong-key AND wrong-finger events.
+  //    This is the technique penalty that lowers CompositeScore even when Accuracy is 100%.
   const errorRate = total > 0 ? (incorrect / total) * 100 : 0;
 
   // ═══════════════════════════════════════════════════════════

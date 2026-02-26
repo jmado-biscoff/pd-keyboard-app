@@ -8,7 +8,7 @@ import { CalibrationOverlay } from "@/components/CalibrationOverlay";
 import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { VideoFeed } from "@/components/VideoFeed";
 import { KEYBOARD_IMAGES } from "@/utils/keyboardImages";
-import { getKeyColor, getCorrectionTip } from "@/utils/typingHelpers";
+import { getKeyColor } from "@/utils/typingHelpers";
 import { runCalibration } from "@/utils/calibrationClient";
 import {
   initModels,
@@ -65,7 +65,9 @@ export default function LearnSession() {
   const [activeKeys, setActiveKeys] = useState<Record<string, string>>({});
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
-  const [lastTip, setLastTip] = useState<string | null>(null);
+  // Physical key accuracy: correct letter pressed regardless of finger technique
+  const [correctKeysCount, setCorrectKeysCount] = useState(0);
+  const [lastError, setLastError] = useState<{ pressed: string; expected: string } | null>(null);
 
   // Completion
   const [moduleComplete, setModuleComplete] = useState(false);
@@ -76,6 +78,7 @@ export default function LearnSession() {
   const currentCharIndexRef = useRef(0);
   const correctCountRef = useRef(0);
   const incorrectCountRef = useRef(0);
+  const correctKeysCountRef = useRef(0);
   const isCalibratingRef = useRef(false);
   const calibrationDoneRef = useRef(false);
   const lastEventRef = useRef("");
@@ -167,6 +170,12 @@ export default function LearnSession() {
     const keyCorrect = key === expectedChar;
     const isFullyCorrect = mlCorrect && keyCorrect;
 
+    // Track physical key accuracy: right letter pressed regardless of finger technique.
+    if (keyCorrect) {
+      correctKeysCountRef.current++;
+      setCorrectKeysCount(correctKeysCountRef.current);
+    }
+
     // Visual feedback on VirtualKeyboard
     const color = getKeyColor(key, expectedChar, data.ml_label);
     setActiveKeys({ [key]: color });
@@ -175,7 +184,7 @@ export default function LearnSession() {
     if (isFullyCorrect) {
       correctCountRef.current++;
       setCorrectCount(correctCountRef.current);
-      setLastTip(null);
+      setLastError(null);
       playCorrectSound();
 
       setCharFeedback((prev) => ({ ...prev, [cIdx]: "correct" }));
@@ -191,7 +200,7 @@ export default function LearnSession() {
           setCurrentDrillIndex(nextDrillIndex);
           setCurrentCharIndex(0);
           setCharFeedback({});
-          setLastTip(null);
+          setLastError(null);
         }
       } else {
         currentCharIndexRef.current = nextCharIndex;
@@ -202,15 +211,13 @@ export default function LearnSession() {
       setIncorrectCount(incorrectCountRef.current);
       playErrorSound();
 
-      if (!keyCorrect && !mlCorrect) {
-        setLastTip(`Wrong key AND wrong finger! Expected: ${expectedChar}. ${getCorrectionTip(expectedChar)}`);
-      } else if (!keyCorrect) {
-        setLastTip(`Wrong key! Expected: ${expectedChar}`);
-      } else if (!mlCorrect) {
-        setLastTip(`Wrong finger! ${getCorrectionTip(expectedChar)}`);
-      }
+      setLastError({ pressed: key, expected: expectedChar });
 
       setCharFeedback((prev) => ({ ...prev, [cIdx]: "incorrect" }));
+
+      // Clear the dedup signature so the user can immediately retry the same
+      // key at the same position without being blocked by the lock guard.
+      lastEventRef.current = "";
 
       setTimeout(() => {
         setCharFeedback((prev) => {
@@ -431,7 +438,7 @@ export default function LearnSession() {
   const targetChar = currentDrill[currentCharIndex]?.toUpperCase();
   const keyboardImage = targetChar ? KEYBOARD_IMAGES[targetChar] : null;
   const totalChars = correctCount + incorrectCount;
-  const accuracyPercent = totalChars > 0 ? Math.round((correctCount / totalChars) * 100) : 100;
+  const accuracyPercent = totalChars > 0 ? Math.round((correctKeysCount / totalChars) * 100) : 100;
 
   // Determine VideoFeed mode
   const videoFeedMode = isCalibrating ? "calibration" : calibrationDone && detecting ? "detection" : "idle";
@@ -495,13 +502,6 @@ export default function LearnSession() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 {/* Left: Video Feed + Feedback */}
                 <div className="flex flex-col gap-3">
-                  {/* Live Feed Label */}
-                  <div className="bg-black/50 border-2 border-blue-400 rounded-lg px-4 py-2 backdrop-blur-sm">
-                    <p className="font-pixel text-sm text-blue-300 text-center uppercase tracking-wider">
-                      Live Feed
-                    </p>
-                  </div>
-
                   <VideoFeed
                     mode={videoFeedMode}
                     calibrationFrame={frame}
@@ -511,17 +511,23 @@ export default function LearnSession() {
                   />
 
                   {/* Incorrect Key Press Feedback */}
-                  {lastTip && calibrationDone && (
-                    <div className="bg-red-500/90 border-2 border-red-600 rounded-lg p-4 shadow-lg backdrop-blur-sm animate-in fade-in duration-300">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">Warning</span>
-                        <div className="flex-1">
-                          <p className="font-pixel text-xs text-white/80 uppercase tracking-wider mb-1">
-                            Correction Needed
-                          </p>
-                          <p className="font-pixel text-sm text-white leading-relaxed">
-                            {lastTip}
-                          </p>
+                  {lastError && calibrationDone && (
+                    <div className="bg-black/80 border-2 border-red-500 rounded-lg p-4 shadow-lg backdrop-blur-sm animate-in fade-in duration-300">
+                      <p className="font-pixel text-[10px] text-white/60 uppercase tracking-widest text-center mb-3">
+                        Correction Needed
+                      </p>
+                      <div className="flex justify-center items-end gap-6">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-16 h-16 bg-red-500 border-2 border-red-300 rounded-lg flex items-center justify-center shadow-lg">
+                            <span className="font-pixel text-3xl text-white">{lastError.pressed}</span>
+                          </div>
+                          <p className="font-pixel text-[9px] text-red-300 uppercase tracking-wider">Pressed</p>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="w-16 h-16 bg-green-500 border-2 border-green-300 rounded-lg flex items-center justify-center shadow-lg">
+                            <span className="font-pixel text-3xl text-white">{lastError.expected}</span>
+                          </div>
+                          <p className="font-pixel text-[9px] text-green-300 uppercase tracking-wider">Expected</p>
                         </div>
                       </div>
                     </div>

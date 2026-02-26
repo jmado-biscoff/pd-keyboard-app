@@ -66,6 +66,10 @@ export default function PlaySession() {
   const [incorrectCount, setIncorrectCount] = useState(0);
   const correctCountRef = useRef(0);
   const incorrectCountRef = useRef(0);
+  // Physical key accuracy: increments when the correct letter is pressed regardless
+  // of which finger was used. Decoupled from correctCount (key + finger both correct).
+  const [correctKeysCount, setCorrectKeysCount] = useState(0);
+  const correctKeysCountRef = useRef(0);
 
   // REFS TO PREVENT CLOSURE ISSUES
   const wordsRef = useRef<string[]>([]);
@@ -346,6 +350,13 @@ export default function PlaySession() {
     const detectedHand = data.hand ? String(data.hand) : undefined;
     const detectedFinger = data.finger ? String(data.finger) : undefined;
 
+    // Track physical key accuracy: right letter pressed, regardless of finger technique.
+    // This increments for both isCorrectFinal=true (right key + right finger) and
+    // the wrong-finger case (right key + wrong finger), but NOT for wrong-key presses.
+    if (key === expectedKey) {
+      setCorrectKeysCount((prev) => { const next = prev + 1; correctKeysCountRef.current = next; return next; });
+    }
+
     if (isCorrectFinal) {
       playCorrectSound();
       setCorrectCount((prev) => { const next = prev + 1; correctCountRef.current = next; return next; });
@@ -471,7 +482,8 @@ export default function PlaySession() {
     }
 
     const totalFingerEvents = correctCountRef.current + incorrectCountRef.current;
-    const accuracyVal = totalFingerEvents > 0 ? Math.round((correctCountRef.current / totalFingerEvents) * 100) : 100;
+    // Live accuracy display uses physical key accuracy (correct letters / total events)
+    const accuracyVal = totalFingerEvents > 0 ? Math.round((correctKeysCountRef.current / totalFingerEvents) * 100) : 100;
     setAccuracy(accuracyVal);
   }, [lastKey, completedExpected, words]);
 
@@ -655,17 +667,22 @@ export default function PlaySession() {
     const sessionDuration = Math.round(actualTypingDuration / 1000);
     const finalCorrectCount = correctCountRef.current;
     const finalIncorrectCount = incorrectCountRef.current;
+    const finalCorrectKeysCount = correctKeysCountRef.current;
     const totalKeystrokes = finalCorrectCount + finalIncorrectCount;
 
     const minutesElapsed = sessionDuration / 60;
     const grossWpm = minutesElapsed > 0 ? (finalCorrectCount + finalIncorrectCount) / (5 * minutesElapsed) : 0;
 
+    // Key accuracy % used for isPerfect guard; analyzeSession uses correctKeysCount
+    // directly (6th param) for the decoupled accuracyPercent computation.
+    const keyAccuracyPct = totalKeystrokes > 0 ? (finalCorrectKeysCount / totalKeystrokes) * 100 : 100;
     const analysis = analyzeSession(
       grossWpm,
-      totalKeystrokes > 0 ? (finalCorrectCount / totalKeystrokes) * 100 : 100,
+      keyAccuracyPct,
       finalCorrectCount,
       finalIncorrectCount,
-      errorHistoryRef.current
+      errorHistoryRef.current,
+      finalCorrectKeysCount
     );
 
     const dbMetrics = formatMetricsForDatabase(analysis, grossWpm);
@@ -827,6 +844,7 @@ export default function PlaySession() {
                 accuracy={finalAnalysis?.dbMetrics.accuracy || accuracy}
                 correctCount={correctCountRef.current}
                 incorrectCount={incorrectCountRef.current}
+                correctKeysCount={correctKeysCountRef.current}
                 typedWordsLength={typedWords.length}
                 errorHistory={errorHistory}
                 sessionHistory={sessionHistoryRef.current}

@@ -41,12 +41,12 @@ let lastRightCount = 0;
 let lastKeystrokeTime = 0;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
-// Throttle hand detection to ~20 Hz
-const DETECTION_INTERVAL_MS = 50;
+// Throttle hand detection to ~30 Hz
+const DETECTION_INTERVAL_MS = 33;
 let lastDetectionTime = 0;
 
-// Debounce interval between keystrokes (same as Python: 250ms)
-const DEBOUNCE_INTERVAL = 250;
+// Debounce interval between keystrokes
+const DEBOUNCE_INTERVAL = 90;
 
 // Minimum fingertips required for detection (lockdown mode, same as Python: 9)
 const MIN_FINGERTIPS = 9;
@@ -143,7 +143,7 @@ export function disposeAll(): void {
 }
 
 /**
- * Hand tracking loop running at ~20 Hz via requestAnimationFrame.
+ * Hand tracking loop running at ~30 Hz via requestAnimationFrame.
  */
 function trackingLoop(): void {
   if (!isRunning || !videoElement || !canvasElement) return;

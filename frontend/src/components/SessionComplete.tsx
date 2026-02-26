@@ -115,6 +115,8 @@ interface SessionCompleteProps {
   accuracy: number;
   correctCount: number;
   incorrectCount: number;
+  /** Physical key accuracy count: correct letters pressed regardless of finger technique */
+  correctKeysCount?: number;
   typedWordsLength: number;
   errorHistory: ErrorHistoryEntry[];
   sessionHistory: SessionHistoryEntry[];
@@ -129,6 +131,7 @@ export const SessionComplete = ({
   accuracy,
   correctCount,
   incorrectCount,
+  correctKeysCount,
   errorHistory,
   sessionHistory,
   onFinish,
@@ -148,7 +151,7 @@ export const SessionComplete = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const analysis = finalAnalysis?.analysis || analyzeSession(wpm, accuracy, correctCount, incorrectCount, errorHistory);
+  const analysis = finalAnalysis?.analysis || analyzeSession(wpm, accuracy, correctCount, incorrectCount, errorHistory, correctKeysCount ?? correctCount);
   const dbMetrics = finalAnalysis?.dbMetrics || {
     wpm,
     netWpm: analysis.netWpm,
@@ -189,32 +192,43 @@ export const SessionComplete = ({
     <PixelCard className="text-center py-6 shadow-xl w-full max-w-3xl mx-auto min-h-[700px]">
 
       {/* ═══════════════════════════════════════════════════════════════
-          POSITION 1: 4-Column Metrics Panel
+          POSITION 1: 5-Column Metrics Panel
+          Accuracy = physical key accuracy (correct letters / total)
+          Error Rate = technique errors (wrong key OR wrong finger / total)
+          These are intentionally decoupled: hitting the right letter with
+          the wrong finger raises Error Rate but keeps Accuracy at 100%.
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-4 gap-3 max-w-md mx-auto mb-6">
+      <div className="grid grid-cols-5 gap-2 max-w-xl mx-auto mb-6">
         <div className="rounded-lg bg-purple-500/15 border border-purple-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[8px] text-purple-400/80 uppercase tracking-wider mb-1">Rating</p>
+          <p className="font-pixel text-[7px] text-purple-400/80 uppercase tracking-wider mb-1">Rating</p>
           <p className="font-pixel text-xl text-purple-400">
             {isCalculating ? "-" : analysis.letterGrade}
           </p>
         </div>
 
         <div className="rounded-lg bg-green-500/15 border border-green-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[8px] text-green-400/80 uppercase tracking-wider mb-1">Score</p>
+          <p className="font-pixel text-[7px] text-green-400/80 uppercase tracking-wider mb-1">Score</p>
           <p className="font-pixel text-xl text-green-400">
             {isCalculating ? "-" : dbMetrics.compositeScore.toFixed(1)}
           </p>
         </div>
 
         <div className="rounded-lg bg-blue-500/15 border border-blue-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[8px] text-blue-400/80 uppercase tracking-wider mb-1">Net WPM</p>
+          <p className="font-pixel text-[7px] text-blue-400/80 uppercase tracking-wider mb-1">Net WPM</p>
           <p className="font-pixel text-xl text-blue-400">
             {isCalculating ? "-" : dbMetrics.netWpm}
           </p>
         </div>
 
+        <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
+          <p className="font-pixel text-[7px] text-yellow-400/80 uppercase tracking-wider mb-1">Accuracy</p>
+          <p className="font-pixel text-xl text-yellow-400">
+            {isCalculating ? "-" : `${analysis.accuracyPercent.toFixed(1)}%`}
+          </p>
+        </div>
+
         <div className="rounded-lg bg-red-500/15 border border-red-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[8px] text-red-400/80 uppercase tracking-wider mb-1">Error Rate</p>
+          <p className="font-pixel text-[7px] text-red-400/80 uppercase tracking-wider mb-1">Err Rate</p>
           <p className="font-pixel text-xl text-red-400">
             {isCalculating ? "-" : `${dbMetrics.errorRate.toFixed(1)}%`}
           </p>

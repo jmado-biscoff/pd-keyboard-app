@@ -33,7 +33,10 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nExclude test files from backend tsc build\n\nFixes Railway build failure caused by vitest/supertest imports\nin test files that aren''t installed in production.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(node:*)",
+      "Bash(npx update-browserslist-db@latest:*)",
+      "Bash(npm update:*)"
     ]
   }
 }
