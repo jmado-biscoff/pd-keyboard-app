@@ -3,7 +3,7 @@
 
 import { detectHands, initHandDetector, disposeHandDetector, type FingertipInfo } from "./handDetector";
 import { initSVM, predictKeystroke } from "./svmInference";
-import { validateKeystroke } from "./groundTruth";
+import { validateKeystroke, KEY_TO_EXPECTED_HAND, KEY_TO_EXPECTED_FINGER } from "./groundTruth";
 
 // Callback interface matching current SSE event types for minimal component changes
 export interface DetectionCallbacks {
@@ -288,12 +288,34 @@ function handleKeyDown(e: KeyboardEvent): void {
   const frameH = videoElement?.videoHeight || 720;
 
   // Run SVM inference (async but fast — microseconds)
+  const inferenceStart = performance.now();
   predictKeystroke(key, closestFinger.name, closestFinger.hand, dx, dy, distance, frameW, frameH)
     .then((svmPred) => {
       if (!callbacks) return;
 
+      const inferenceMs = (performance.now() - inferenceStart).toFixed(2);
+
+      // Compute rule-based components independently for logging
+      const k = key.toLowerCase();
+      const expectedHand = KEY_TO_EXPECTED_HAND[k];
+      const expectedFinger = KEY_TO_EXPECTED_FINGER[k];
+      const handCorrect = !expectedHand || closestFinger!.hand === expectedHand;
+      const fingerCorrect = !expectedFinger || closestFinger!.name === expectedFinger;
+
       // Apply ground truth validation
       const mlLabel = validateKeystroke(svmPred, closestFinger!.hand, closestFinger!.name, key);
+
+      const soundPlaying = mlLabel === "Correct" ? "click_sound" : "error_sound";
+
+      console.log(
+        `[KeyPress] Key: ${key.toUpperCase()} | Finger: ${closestFinger!.name} | Hand: ${closestFinger!.hand}\n` +
+        `  Classifier:          ${mlLabel}\n` +
+        `  Sound Playing:       ${soundPlaying}\n` +
+        `  Model Inference time: ${inferenceMs}ms\n` +
+        `  isKey_Correct:       ${svmPred === 1}\n` +
+        `  isFinger_Correct:    ${fingerCorrect}\n` +
+        `  is_Hand_Correct:     ${handCorrect}`
+      );
 
       callbacks.onDetection({
         type: "detection",
