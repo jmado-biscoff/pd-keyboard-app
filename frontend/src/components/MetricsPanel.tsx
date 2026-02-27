@@ -3,6 +3,7 @@ import { PixelCard } from "./PixelCard";
 interface MetricsPanelProps {
   correctCount: number;
   incorrectCount: number;
+  correctKeysCount: number;
   wpm: number;
   accuracy: number;
   timeLeft: number;
@@ -12,6 +13,7 @@ interface MetricsPanelProps {
 export const MetricsPanel = ({
   correctCount,
   incorrectCount,
+  correctKeysCount,
   wpm,
   accuracy,
   timeLeft,
@@ -27,6 +29,11 @@ export const MetricsPanel = ({
       <PixelCard variant="red" className="p-2.5 text-center">
         <p className="font-pixel text-[9px] uppercase tracking-widest text-white/70 mb-0.5">Incorrect</p>
         <p className="font-pixel text-2xl text-white drop-shadow">{incorrectCount}</p>
+      </PixelCard>
+
+      <PixelCard variant="blue" className="p-2.5 text-center">
+        <p className="font-pixel text-[9px] uppercase tracking-widest text-white/70 mb-0.5">Correct Keys</p>
+        <p className="font-pixel text-2xl text-white drop-shadow">{correctKeysCount}</p>
       </PixelCard>
 
       <PixelCard variant="yellow" className="p-2.5 text-center">

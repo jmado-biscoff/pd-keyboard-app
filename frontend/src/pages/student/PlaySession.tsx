@@ -676,13 +676,15 @@ export default function PlaySession() {
     // Key accuracy % used for isPerfect guard; analyzeSession uses correctKeysCount
     // directly (6th param) for the decoupled accuracyPercent computation.
     const keyAccuracyPct = totalKeystrokes > 0 ? (finalCorrectKeysCount / totalKeystrokes) * 100 : 100;
+    const totalExpectedChars = wordsRef.current.join(" ").length;
     const analysis = analyzeSession(
       grossWpm,
       keyAccuracyPct,
       finalCorrectCount,
       finalIncorrectCount,
       errorHistoryRef.current,
-      finalCorrectKeysCount
+      finalCorrectKeysCount,
+      totalExpectedChars
     );
 
     const dbMetrics = formatMetricsForDatabase(analysis, grossWpm);
@@ -701,7 +703,7 @@ export default function PlaySession() {
             wpm: dbMetrics.wpm, accuracy: dbMetrics.accuracy, grade: dbMetrics.grade,
             sessionType, correctCount: finalCorrectCount,
             wrongKeysCount, wrongFingersCount, skippedCount,
-            compositeScore: dbMetrics.compositeScore, netWpm: dbMetrics.netWpm, errorRate: dbMetrics.errorRate,
+            compositeScore: dbMetrics.compositeScore, netWpm: dbMetrics.netWpm, errorRate: dbMetrics.errorRate, completionRate: dbMetrics.completionRate,
             ...(sessionId ? { sessionId } : {}),
           }),
         });
@@ -783,6 +785,7 @@ export default function PlaySession() {
           <MetricsPanel
             correctCount={correctCount}
             incorrectCount={incorrectCount}
+            correctKeysCount={correctKeysCount}
             wpm={wpm}
             accuracy={accuracy}
             timeLeft={timeLeft}
@@ -893,6 +896,18 @@ export default function PlaySession() {
                   </div>
                 );
               })()}
+              {/* ── Completion Rate Indicator ── */}
+              {finalAnalysis && (
+                <div className={`rounded-lg flex items-center justify-center py-3 ${finalAnalysis.analysis.completionRate < 50 ? "bg-red-500/80" : "bg-green-500/80"}`}>
+                  <p className="font-pixel text-[9px] uppercase tracking-wider text-white mr-2">Completion:</p>
+                  <p className="font-pixel text-sm text-white">
+                    {`${finalAnalysis.analysis.completionRate.toFixed(1)}%`}
+                  </p>
+                  {finalAnalysis.analysis.completionRate < 50 && (
+                    <span className="font-pixel text-[8px] text-white/80 ml-2">(penalty)</span>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <ErrorQueue errorQueue={errorQueue} />

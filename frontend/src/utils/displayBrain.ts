@@ -25,6 +25,9 @@ export type { ErrorHistoryEntry, SessionAnalysis };
  *   regardless of finger technique). When provided, Accuracy is decoupled from
  *   technique so a user who hits the right key with the wrong finger scores 100%
  *   Accuracy but retains a high Error Rate.
+ * @param totalExpectedChars - Total number of characters in the exercise. Used to
+ *   calculate completion rate. If the user completes less than 50% of the exercise,
+ *   the composite score is penalized proportionally.
  * @returns Complete session analysis with grades, scores, and insights
  */
 export const analyzeSession = (
@@ -33,7 +36,8 @@ export const analyzeSession = (
   correct: number,
   incorrect: number,
   errorHistory: ErrorHistoryEntry[],
-  correctKeysCount?: number
+  correctKeysCount?: number,
+  totalExpectedChars?: number
 ): SessionAnalysis => {
   const total = correct + incorrect;
   const isPerfect = errorHistory.length === 0 && accuracy === 100;
@@ -79,13 +83,27 @@ export const analyzeSession = (
   }
 
   // ═══════════════════════════════════════════════════════════
-  // WEIGHTED COMPOSITE SCORE (with cap to prevent scores > 100)
+  // COMPLETION FACTOR
+  // No penalty if ≥50% of exercise completed; gradual penalty below 50%.
+  // CompletionFactor = min(1, charactersTyped / (totalExpectedChars * 0.5))
   // ═══════════════════════════════════════════════════════════
-  // Score = (Accuracy * 0.45) + ((100 - ErrorRate) * 0.30) + (min(1, NetWPM / MaxWPM) * 100 * 0.25)
-  const compositeScore =
+  const completionRate = totalExpectedChars && totalExpectedChars > 0
+    ? Math.min(1, total / totalExpectedChars)
+    : (total > 0 ? 1 : 0);
+  const completionFactor = totalExpectedChars && totalExpectedChars > 0
+    ? Math.min(1, total / (totalExpectedChars * 0.5))
+    : 1;
+
+  // ═══════════════════════════════════════════════════════════
+  // WEIGHTED COMPOSITE SCORE (with cap and completion factor)
+  // ═══════════════════════════════════════════════════════════
+  // RawScore = (Accuracy * 0.45) + ((100 - ErrorRate) * 0.30) + (min(1, NetWPM / MaxWPM) * 100 * 0.25)
+  // CompositeScore = RawScore * CompletionFactor
+  const rawCompositeScore =
     (accuracyPercent * 0.45) +
     ((100 - errorRate) * 0.30) +
     (Math.min(1, netWpm / maxWpm) * 100 * 0.25);
+  const compositeScore = rawCompositeScore * completionFactor;
 
   // ═══════════════════════════════════════════════════════════
   // GRADE ASSIGNMENT (with Error-Dominant Penalty)
@@ -181,6 +199,7 @@ export const analyzeSession = (
     errorRate,
     letterGrade,
     compositeScore,
+    completionRate: parseFloat((completionRate * 100).toFixed(1)),
   };
 };
 
@@ -198,5 +217,6 @@ export const formatMetricsForDatabase = (analysis: SessionAnalysis, grossWpm: nu
     errorRate: parseFloat(analysis.errorRate.toFixed(1)),    // 1 decimal place
     compositeScore: parseFloat(analysis.compositeScore.toFixed(1)), // 1 decimal place
     grade: analysis.letterGrade,
+    completionRate: analysis.completionRate, // Already 1 decimal place
   };
 };

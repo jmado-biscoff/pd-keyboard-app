@@ -44,6 +44,7 @@ export interface SessionAnalysis {
   errorRate: number;
   letterGrade: string;
   compositeScore: number;
+  completionRate: number;
 }
 
 /**

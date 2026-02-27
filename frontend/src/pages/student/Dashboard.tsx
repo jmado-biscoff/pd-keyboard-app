@@ -366,6 +366,8 @@ export default function StudentDashboard() {
                     <p className="font-pixel text-xs text-muted-foreground leading-relaxed">
                       Your composite score combines speed, accuracy, and proper finger technique.
                       Using the correct fingers is just as important as typing fast!
+                      If you complete less than 50% of the exercise, your score will be reduced
+                      based on your completion rate.
                     </p>
                   </div>
                 </div>

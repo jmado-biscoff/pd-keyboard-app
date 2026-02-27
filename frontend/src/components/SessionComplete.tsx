@@ -158,6 +158,7 @@ export const SessionComplete = ({
     accuracy: analysis.accuracyPercent,
     errorRate: analysis.errorRate,
     compositeScore: analysis.compositeScore,
+    completionRate: analysis.completionRate,
   };
 
   // ════════════════════════════════════════════════════════════
@@ -233,6 +234,7 @@ export const SessionComplete = ({
             {isCalculating ? "-" : `${dbMetrics.errorRate.toFixed(1)}%`}
           </p>
         </div>
+
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ router.post("/", async (req: Request, res: Response) => {
       compositeScore,
       netWpm,
       errorRate,
+      completionRate,
       sessionId
     } = req.body;
 
@@ -45,6 +46,7 @@ router.post("/", async (req: Request, res: Response) => {
       compositeScore: compositeScore || 0,
       netWpm: netWpm || 0,
       errorRate: errorRate || 0,
+      completionRate: completionRate || 0,
       ...(sessionId ? { sessionId } : {}),
     });
 

@@ -20,6 +20,7 @@ const ResultSchema = new mongoose.Schema(
     compositeScore: { type: Number, default: 0 },
     netWpm: { type: Number, default: 0 },
     errorRate: { type: Number, default: 0 },
+    completionRate: { type: Number, default: 0 },
     sessionId: { type: String, required: false },
     date: { type: Date, default: Date.now },
   },
