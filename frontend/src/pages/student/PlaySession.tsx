@@ -676,7 +676,7 @@ export default function PlaySession() {
     // Key accuracy % used for isPerfect guard; analyzeSession uses correctKeysCount
     // directly (6th param) for the decoupled accuracyPercent computation.
     const keyAccuracyPct = totalKeystrokes > 0 ? (finalCorrectKeysCount / totalKeystrokes) * 100 : 100;
-    const totalExpectedChars = wordsRef.current.join(" ").length;
+    const totalExpectedChars = wordsRef.current.join("").length;
     const analysis = analyzeSession(
       grossWpm,
       keyAccuracyPct,
@@ -898,13 +898,13 @@ export default function PlaySession() {
               })()}
               {/* ── Completion Rate Indicator ── */}
               {finalAnalysis && (
-                <div className={`rounded-lg flex items-center justify-center py-3 ${finalAnalysis.analysis.completionRate < 50 ? "bg-red-500/80" : "bg-green-500/80"}`}>
-                  <p className="font-pixel text-[9px] uppercase tracking-wider text-white mr-2">Completion:</p>
+                <div className={`rounded-lg flex flex-col items-center justify-center py-2 px-3 ${finalAnalysis.analysis.completionRate < 50 ? "bg-red-500/80" : "bg-green-500/80"}`}>
+                  <p className="font-pixel text-[8px] uppercase tracking-wider text-white/70 mb-0.5">Completion</p>
                   <p className="font-pixel text-sm text-white">
                     {`${finalAnalysis.analysis.completionRate.toFixed(1)}%`}
                   </p>
                   {finalAnalysis.analysis.completionRate < 50 && (
-                    <span className="font-pixel text-[8px] text-white/80 ml-2">(penalty)</span>
+                    <p className="font-pixel text-[7px] text-white/70 mt-0.5">(penalty applied)</p>
                   )}
                 </div>
               )}
