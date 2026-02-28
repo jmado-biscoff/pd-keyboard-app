@@ -147,6 +147,15 @@ export default function PlaySession() {
   // Sync refs with state
   useEffect(() => { isCalibratingRef.current = isCalibrating; }, [isCalibrating]);
   useEffect(() => { fingerErrorRef.current = fingerError; }, [fingerError]);
+
+  // Dev console: MediaPipe keypoints monitor (1s interval)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const total = leftFingersCountRef.current + rightFingersCountRef.current;
+      console.log(`[MediaPipe]\nKeypoints: ${total}\nLeft: ${leftFingersCountRef.current}\nRight: ${rightFingersCountRef.current}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
   useEffect(() => { sessionHistoryRef.current = sessionHistory; }, [sessionHistory]);
   useEffect(() => { fingertipCountRef.current = fingertipCount; }, [fingertipCount]);
   useEffect(() => { wordsRef.current = words; }, [words]);
