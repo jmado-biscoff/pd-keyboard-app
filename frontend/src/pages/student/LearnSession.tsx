@@ -5,10 +5,8 @@ import { PixelButton } from "@/components/PixelButton";
 import { PixelCard } from "@/components/PixelCard";
 import { ArrowLeft } from "lucide-react";
 import { CalibrationOverlay } from "@/components/CalibrationOverlay";
-import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { VideoFeed } from "@/components/VideoFeed";
 import { KEYBOARD_IMAGES } from "@/utils/keyboardImages";
-import { getKeyColor } from "@/utils/typingHelpers";
 import { runCalibration } from "@/utils/calibrationClient";
 import {
   initModels,
@@ -62,12 +60,13 @@ export default function LearnSession() {
   const [frame, setFrame] = useState<string | null>(null);
 
   // Feedback
-  const [activeKeys, setActiveKeys] = useState<Record<string, string>>({});
   const [correctCount, setCorrectCount] = useState(0);
   const [incorrectCount, setIncorrectCount] = useState(0);
   // Physical key accuracy: correct letter pressed regardless of finger technique
   const [correctKeysCount, setCorrectKeysCount] = useState(0);
   const [lastError, setLastError] = useState<{ pressed: string; expected: string } | null>(null);
+  const [lastPressedKey, setLastPressedKey] = useState<string | null>(null);
+  const [isLastSuccess, setIsLastSuccess] = useState<boolean | null>(null);
 
   // Completion
   const [moduleComplete, setModuleComplete] = useState(false);
@@ -148,6 +147,7 @@ export default function LearnSession() {
   }) => {
     if (!data.key) return;
     const key = String(data.key).toUpperCase();
+    setLastPressedKey(key);
     if (!/^[A-Z]$/.test(key)) return;
     if (isCalibratingRef.current) return;
 
@@ -170,16 +170,14 @@ export default function LearnSession() {
     const keyCorrect = key === expectedChar;
     const isFullyCorrect = mlCorrect && keyCorrect;
 
+    // Track for UI feedback
+    setIsLastSuccess(isFullyCorrect);
+
     // Track physical key accuracy: right letter pressed regardless of finger technique.
     if (keyCorrect) {
       correctKeysCountRef.current++;
       setCorrectKeysCount(correctKeysCountRef.current);
     }
-
-    // Visual feedback on VirtualKeyboard
-    const color = getKeyColor(key, expectedChar, data.ml_label);
-    setActiveKeys({ [key]: color });
-    setTimeout(() => setActiveKeys({}), 300);
 
     if (isFullyCorrect) {
       correctCountRef.current++;
@@ -262,7 +260,6 @@ export default function LearnSession() {
     try {
       setFrame(null);
       setCalibrationProgress({ detected: 0, required: 26 });
-      setActiveKeys({});
       setCalibratedKeys([]);
       setDetectionError(null);
       setIsCalibrating(true);
@@ -353,7 +350,6 @@ export default function LearnSession() {
   const handleRecalibrate = async () => {
     setFrame(null);
     setCalibrationProgress({ detected: 0, required: 26 });
-    setActiveKeys({});
     setCalibratedKeys([]);
     setCalibrationDone(false);
     setShowCalibrationComplete(false);
@@ -498,123 +494,128 @@ export default function LearnSession() {
 
           {!moduleComplete ? (
             <>
-              {/* Main Layout: Video + Learning Interface */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                {/* Left: Video Feed + Feedback */}
-                <div className="flex flex-col gap-3">
-                  <VideoFeed
-                    mode={videoFeedMode}
-                    calibrationFrame={frame}
-                    videoRef={videoRef}
-                    canvasRef={canvasRef}
-                    calibrationDone={calibrationDone}
-                  />
+              {/* ═══════════════════════════════════════════════════════════════
+                  MIDDLE SECTION: Left Sidebar + Center Content + Right Sidebar
+                  ═══════════════════════════════════════════════════════════════ */}
+              <div className="flex gap-4">
+                {/* Left: Vertical Metrics Stack */}
+                {calibrationDone && (
+                  <div className="flex flex-col gap-3 shrink-0">
+                    <div className="bg-purple-500 border-2 border-purple-300 rounded-lg px-4 py-2 text-center">
+                      <p className="font-pixel text-[9px] text-white/80">Drill</p>
+                      <p className="font-pixel text-lg text-white">{currentDrillIndex + 1}/{drills.length}</p>
+                    </div>
+                    <div className="bg-red-500 border-2 border-red-300 rounded-lg px-4 py-2 text-center">
+                      <p className="font-pixel text-[9px] text-white/80">Accuracy</p>
+                      <p className="font-pixel text-lg text-white">{accuracyPercent}%</p>
+                    </div>
+                    <div className="bg-green-500 border-2 border-green-300 rounded-lg px-4 py-2 text-center">
+                      <p className="font-pixel text-[9px] text-white/80">Correct</p>
+                      <p className="font-pixel text-lg text-white">{correctCount}</p>
+                    </div>
+                  </div>
+                )}
 
-                  {/* Incorrect Key Press Feedback */}
-                  {lastError && calibrationDone && (
-                    <div className="bg-black/80 border-2 border-red-500 rounded-lg p-4 shadow-lg backdrop-blur-sm animate-in fade-in duration-300">
-                      <p className="font-pixel text-[10px] text-white/60 uppercase tracking-widest text-center mb-3">
-                        Correction Needed
-                      </p>
-                      <div className="flex justify-center items-end gap-6">
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-16 h-16 bg-red-500 border-2 border-red-300 rounded-lg flex items-center justify-center shadow-lg">
-                            <span className="font-pixel text-3xl text-white">{lastError.pressed}</span>
+                {/* Center: VideoFeed + Press Key + Drill + Keyboard Image */}
+                <div className="flex-1 flex flex-col gap-3">
+                  {/* VideoFeed - whole visibility, slightly smaller max-width */}
+                  <div className="flex justify-center rounded-lg">
+                    <VideoFeed
+                      mode={videoFeedMode}
+                      calibrationFrame={frame}
+                      videoRef={videoRef}
+                      canvasRef={canvasRef}
+                      calibrationDone={calibrationDone}
+                    />
+                  </div>
+
+                  {/* Press Key + Drill side-by-side */}
+                  {calibrationDone && (
+                    <div className="flex gap-3">
+                      {/* Current target letter */}
+                      {targetChar && (
+                        <div className="bg-black/50 border-2 border-purple-400 backdrop-blur-sm px-6 py-4 rounded-lg shrink-0">
+                          <div className="text-center">
+                            <p className="font-pixel text-[9px] text-white/70 uppercase tracking-widest mb-1">
+                              Press this key
+                            </p>
+                            <p className="font-pixel text-5xl text-purple-400 animate-pulse drop-shadow-lg">
+                              {targetChar}
+                            </p>
                           </div>
-                          <p className="font-pixel text-[9px] text-red-300 uppercase tracking-wider">Pressed</p>
                         </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="w-16 h-16 bg-green-500 border-2 border-green-300 rounded-lg flex items-center justify-center shadow-lg">
-                            <span className="font-pixel text-3xl text-white">{lastError.expected}</span>
+                      )}
+
+                      {/* Drill display with character-level feedback */}
+                      {currentDrill && (
+                        <div className={`flex-1 bg-black/60 border-2 border-yellow-300 backdrop-blur-sm rounded-lg min-h-[96px] flex items-center justify-center px-4 ${charFeedback[currentCharIndex] === "incorrect" ? "animate-shake" : ""}`}>
+                          <div className="font-pixel text-xl text-center tracking-[0.4em]">
+                            {currentDrill.split("").map((ch, i) => {
+                              let colorClass = "text-gray-500";
+                              if (charFeedback[i] === "correct") colorClass = "text-green-400";
+                              else if (charFeedback[i] === "incorrect") colorClass = "text-red-400";
+                              else if (i === currentCharIndex) colorClass = "text-purple-400 animate-pulse";
+                              return (
+                                <span key={i} className={colorClass}>
+                                  {ch.toUpperCase()}
+                                </span>
+                              );
+                            })}
                           </div>
-                          <p className="font-pixel text-[9px] text-green-300 uppercase tracking-wider">Expected</p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
-                </div>
 
-                {/* Right: Learning Interface */}
-                <div className="flex flex-col items-center justify-center gap-4">
-                  {/* Module description */}
-                  <PixelCard className="bg-black/50 border-2 border-yellow-400 backdrop-blur-sm px-6 py-3">
-                    <p className="font-pixel text-xs text-yellow-200 text-center">
-                      {MODULE_DESCRIPTIONS[moduleId]}
-                    </p>
-                  </PixelCard>
-
-                  {/* Proper keyboard image for target letter */}
+                  {/* Keyboard positioning image - fixed size to prevent layout shift */}
                   {keyboardImage && calibrationDone && (
-                    <div className="flex justify-center">
+                    <div className="flex justify-center w-full max-w-2xl mx-auto h-80">
                       <img
                         src={keyboardImage}
                         alt={`Press ${targetChar}`}
-                        className="w-full max-w-md h-auto rounded-xl shadow-2xl border-2 border-yellow-300/60"
+                        className="w-full h-full object-contain rounded-lg shadow-xl border-2 border-yellow-300/60"
                       />
                     </div>
                   )}
-
-                  {/* Current target letter */}
-                  {calibrationDone && targetChar && (
-                    <PixelCard className="bg-black/50 border-2 border-purple-400 backdrop-blur-sm px-8 py-6">
-                      <div className="text-center">
-                        <p className="font-pixel text-[10px] text-white/70 uppercase tracking-widest mb-2">
-                          Press this key
-                        </p>
-                        <p className="font-pixel text-6xl text-purple-400 animate-pulse drop-shadow-lg">
-                          {targetChar}
-                        </p>
-                      </div>
-                    </PixelCard>
-                  )}
-
-                  {/* Drill display with character-level feedback */}
-                  {calibrationDone && currentDrill && (
-                    <PixelCard className={`w-full max-w-md bg-black/60 border-2 border-yellow-300 backdrop-blur-sm ${charFeedback[currentCharIndex] === "incorrect" ? "animate-shake" : ""
-                      }`}>
-                      <div className="font-pixel text-xl text-center tracking-[0.3em] py-2">
-                        {currentDrill.split("").map((ch, i) => {
-                          let colorClass = "text-gray-500";
-                          if (charFeedback[i] === "correct") colorClass = "text-green-400";
-                          else if (charFeedback[i] === "incorrect") colorClass = "text-red-400";
-                          else if (i === currentCharIndex) colorClass = "text-purple-400 animate-pulse";
-                          return (
-                            <span key={i} className={colorClass}>
-                              {ch.toUpperCase()}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </PixelCard>
-                  )}
-
-                  {/* Progress & Metrics */}
-                  {calibrationDone && (
-                    <div className="flex gap-4">
-                      <PixelCard variant="yellow" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px] text-foreground/60">Drill</p>
-                        <p className="font-pixel text-lg text-foreground">{currentDrillIndex + 1}/{drills.length}</p>
-                      </PixelCard>
-                      <PixelCard variant="green" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px] text-foreground/60">Accuracy</p>
-                        <p className="font-pixel text-lg text-foreground">{accuracyPercent}%</p>
-                      </PixelCard>
-                      <PixelCard variant="purple" className="text-center px-4 py-2">
-                        <p className="font-pixel text-[9px] text-foreground/60">Correct</p>
-                        <p className="font-pixel text-lg text-foreground">{correctCount}</p>
-                      </PixelCard>
-                    </div>
-                  )}
                 </div>
-              </div>
 
-              {/* Virtual Keyboard */}
-              <div className="mb-3">
-                <VirtualKeyboard activeKeys={activeKeys} isCalibrating={isCalibrating} />
+                {/* Right: Correction Needed */}
+                {calibrationDone && (
+                  <div className="flex flex-col shrink-0">
+                    <div className="bg-black/80 border-2 border-white/20 rounded-lg p-4 shadow-lg backdrop-blur-sm min-w-[140px]">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className={`w-14 h-14 border-2 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                            isLastSuccess === null ? "bg-white/5 border-white/20" :
+                            isLastSuccess === true ? "bg-green-500/20 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]" : 
+                            "bg-red-500/20 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+                          }`}>
+                            <span className={`font-pixel text-2xl ${
+                              isLastSuccess === null ? "text-white/20" :
+                              isLastSuccess === true ? "text-green-400" : "text-red-400"
+                            }`}>
+                              {lastPressedKey || "-"}
+                            </span>
+                          </div>
+                          <p className="font-pixel text-[8px] text-white/50 uppercase tracking-widest">Pressed</p>
+                        </div>
+
+                        <div className="w-8 h-[1px] bg-white/10" />
+
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="w-14 h-14 bg-purple-500/15 border-2 border-purple-400 rounded-lg flex items-center justify-center shadow-[0_0_10px_rgba(192,132,252,0.2)]">
+                            <span className="font-pixel text-2xl text-purple-400">{targetChar || "-"}</span>
+                          </div>
+                          <p className="font-pixel text-[8px] text-purple-300/70 uppercase tracking-widest">Expected</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recalibrate button */}
-              <div className="text-center">
+              <div className="mt-4 text-center">
                 <PixelButton
                   variant="secondary"
                   size="sm"

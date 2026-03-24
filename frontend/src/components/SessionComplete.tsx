@@ -201,36 +201,36 @@ export const SessionComplete = ({
           ═══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-5 gap-2 max-w-xl mx-auto mb-6">
         <div className="rounded-lg bg-purple-500/15 border border-purple-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[7px] text-purple-400/80 uppercase tracking-wider mb-1">Rating</p>
-          <p className="font-pixel text-xl text-purple-400">
+          <p className="font-pixel text-[7px] text-purple-700 uppercase tracking-wider mb-1">Rating</p>
+          <p className="font-pixel text-xl text-purple-600">
             {isCalculating ? "-" : analysis.letterGrade}
           </p>
         </div>
 
         <div className="rounded-lg bg-green-500/15 border border-green-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[7px] text-green-400/80 uppercase tracking-wider mb-1">Score</p>
-          <p className="font-pixel text-xl text-green-400">
+          <p className="font-pixel text-[7px] text-green-700 uppercase tracking-wider mb-1">Score</p>
+          <p className="font-pixel text-xl text-green-600">
             {isCalculating ? "-" : dbMetrics.compositeScore.toFixed(1)}
           </p>
         </div>
 
         <div className="rounded-lg bg-blue-500/15 border border-blue-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[7px] text-blue-400/80 uppercase tracking-wider mb-1">Net WPM</p>
-          <p className="font-pixel text-xl text-blue-400">
+          <p className="font-pixel text-[7px] text-blue-700 uppercase tracking-wider mb-1">Net WPM</p>
+          <p className="font-pixel text-xl text-blue-600">
             {isCalculating ? "-" : dbMetrics.netWpm}
           </p>
         </div>
 
         <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[7px] text-yellow-400/80 uppercase tracking-wider mb-1">Accuracy</p>
-          <p className="font-pixel text-xl text-yellow-400">
+          <p className="font-pixel text-[7px] text-yellow-700 uppercase tracking-wider mb-1">Accuracy</p>
+          <p className="font-pixel text-xl text-yellow-600">
             {isCalculating ? "-" : `${analysis.accuracyPercent.toFixed(1)}%`}
           </p>
         </div>
 
         <div className="rounded-lg bg-red-500/15 border border-red-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
-          <p className="font-pixel text-[7px] text-red-400/80 uppercase tracking-wider mb-1">Err Rate</p>
-          <p className="font-pixel text-xl text-red-400">
+          <p className="font-pixel text-[7px] text-red-700 uppercase tracking-wider mb-1">Err Rate</p>
+          <p className="font-pixel text-xl text-red-600">
             {isCalculating ? "-" : `${dbMetrics.errorRate.toFixed(1)}%`}
           </p>
         </div>
@@ -254,8 +254,8 @@ export const SessionComplete = ({
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center bg-green-500/15 border border-green-500/30 rounded-lg h-full">
-                <p className="font-pixel text-lg text-green-400 mb-1">Correct finger used!</p>
-                <p className="font-pixel text-[10px] text-green-400/70">
+                <p className="font-pixel text-lg text-green-800 mb-1">Correct finger used!</p>
+                <p className="font-pixel text-[10px] text-green-800">
                   Great job! You used the correct touch typing technique.
                 </p>
               </div>

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { HTMLAttributes } from "react";
 
 interface PixelCardProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "orange" | "red" | "yellow" | "purple" | "green" | "blue" | "accent";
+  variant?: "default" | "orange" | "red" | "yellow" | "purple" | "green" | "blue" | "accent" | "black";
   translucent?: boolean;
 }
 
@@ -22,6 +22,7 @@ export const PixelCard = ({
     green: "bg-[rgba(88,187,120,0.8)]",
     blue: "bg-[rgba(59,130,246,0.8)]",
     accent: "bg-[rgba(139,92,246,0.8)]",
+    black: "bg-[rgba(20,20,20,0.85)]",
   };
 
   const translucentClass = "bg-[rgba(20,20,20,0.45)] backdrop-blur-sm";

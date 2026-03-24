@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { PixelCard } from "@/components/PixelCard";
-import bgVideo from "@/assets/b10.mp4";
+import bgGif from "@/assets/teacher_background_mainmenu.gif";
 import classroomLogo from "@/assets/classroom.png";
 import settingsLogo from "@/assets/settings-logo.png";
 import { resolveProfileImage } from "@/utils/profileAssets";
@@ -18,30 +18,26 @@ export default function TeacherDashboard() {
       title: "Classroom",
       logo: classroomLogo,
       path: "/teacher/classroom",
-      variant: "orange" as const,
+      variant: "green" as const,
       description: "Manage students",
     },
     {
       title: "Settings",
       logo: settingsLogo,
       path: "/teacher/settings",
-      variant: "purple" as const,
+      variant: "blue" as const,
       description: "Account settings",
     },
   ];
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
+      {/* Background GIF */}
+      <img
+        src={bgGif}
+        alt="Background"
         className="absolute top-0 left-0 w-full h-full object-cover -z-10"
-      >
-        <source src={bgVideo} type="video/mp4" />
-      </video>
+      />
 
       {/* Page Content */}
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">

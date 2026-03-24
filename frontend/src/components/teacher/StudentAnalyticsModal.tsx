@@ -60,7 +60,18 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-const TRIAL_COLORS = ["#F4A942", "#E879F9", "#38BDF8"];
+const RAINBOW_COLORS = [
+  "#ef4444", // Red
+  "#f97316", // Orange
+  "#f59e0b", // Amber
+  "#eab308", // Yellow
+  "#84cc16", // Lime
+  "#10b981", // Emerald
+  "#06b6d4", // Cyan
+  "#3b82f6", // Blue
+  "#6366f1", // Indigo
+  "#a855f7", // Purple
+];
 
 const CustomBarTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
@@ -148,15 +159,7 @@ function ProgressChart({ data, title }: { data: BarDataPoint[]; title: string })
     <div className="mb-6">
       <h4 className="font-pixel text-sm mb-2 text-white">{title}</h4>
       <div className="bg-white/5 rounded-lg p-3">
-        {/* Legend */}
-        <div className="flex gap-4 mb-2 justify-end">
-          {["Trial 1", "Trial 2", "Trial 3"].map((label, i) => (
-            <div key={label} className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: TRIAL_COLORS[i] }} />
-              <span className="font-pixel text-[9px] text-white/60">{label}</span>
-            </div>
-          ))}
-        </div>
+        <div className="h-2" />
         <div className="overflow-x-auto">
           <BarChart
             width={chartWidth}
@@ -182,7 +185,7 @@ function ProgressChart({ data, title }: { data: BarDataPoint[]; title: string })
               {data.map((entry, index) => (
                 <Cell
                   key={index}
-                  fill={TRIAL_COLORS[Math.min(entry.trialIndex - 1, TRIAL_COLORS.length - 1)]}
+                  fill={RAINBOW_COLORS[(entry.sessionIndex - 1) % RAINBOW_COLORS.length]}
                 />
               ))}
             </Bar>

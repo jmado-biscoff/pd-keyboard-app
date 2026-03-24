@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import StudentAnalyticsModal from "@/components/teacher/StudentAnalyticsModal";
-import bgVideo from "@/assets/b11.mp4";
+import bgGif from "@/assets/classroom_background.gif";
 import { resolveProfileImage } from "@/utils/profileAssets";
 import fallbackProfilePic from "@/assets/cat-profile.jpg";
 
@@ -308,16 +308,12 @@ export default function Classroom() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
+      {/* Background GIF */}
+      <img
+        src={bgGif}
+        alt="Background"
         className="absolute top-0 left-0 w-full h-full object-cover -z-10"
-      >
-        <source src={bgVideo} type="video/mp4" />
-      </video>
+      />
 
       {/* Page Content */}
       <div className="relative z-10 p-8 bg-black/20 min-h-screen">
@@ -334,7 +330,7 @@ export default function Classroom() {
           </div>
 
           {/* 🔸 Create new classroom */}
-          <PixelCard variant="orange" className="mb-10 text-white">
+          <PixelCard variant="black" className="mb-10 text-white">
             <h2 className="font-pixel text-xl mb-3 flex items-center gap-2">
               <PlusCircle size={22} /> Create New Classroom
             </h2>
@@ -346,7 +342,7 @@ export default function Classroom() {
                 value={newClassName}
                 onChange={(e) => setNewClassName(e.target.value)}
               />
-              <PixelButton onClick={handleCreate}>Create</PixelButton>
+              <PixelButton variant="green" onClick={handleCreate}>Create</PixelButton>
             </div>
           </PixelCard>
 
@@ -355,7 +351,7 @@ export default function Classroom() {
             {classrooms.map((cls) => (
               <PixelCard
                 key={cls._id}
-                variant="orange"
+                variant="black"
                 className="text-white shadow-lg transition-all hover:scale-[1.01] border-2 border-transparent hover:border-white/20"
               >
                 <div className="flex justify-between items-center">
@@ -375,7 +371,7 @@ export default function Classroom() {
                       <Copy size={16} />
                     </PixelButton>
                     <PixelButton
-                      variant="purple"
+                      variant="blue"
                       onClick={() => toggleExpand(cls._id)}
                       className="hover:scale-110 transition-transform"
                     >
@@ -504,22 +500,29 @@ export default function Classroom() {
                           <div className="mb-3">
                             <p className="font-pixel text-[10px] opacity-70 mb-2">LEVEL</p>
                             <div className="flex gap-2">
-                              {(["characters", "words", "both"] as const).map((lvl) => (
-                                <PixelButton
-                                  key={lvl}
-                                  size="sm"
-                                  variant={evalSettingsMap[cls._id]?.level === lvl ? "accent" : "secondary"}
-                                  onClick={() =>
-                                    setEvalSettingsMap((prev) => ({
-                                      ...prev,
-                                      [cls._id]: { ...prev[cls._id], level: lvl },
-                                    }))
-                                  }
-                                  disabled={evalSettingsMap[cls._id]?.isActive}
-                                >
-                                  {lvl === "characters" ? "Letters" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
-                                </PixelButton>
-                              ))}
+                              {(["characters", "words", "both"] as const).map((lvl) => {
+                                const currentLevel = evalSettingsMap[cls._id]?.level || "characters";
+                                const isBoth = currentLevel === "both";
+                                const isSelected = lvl === "both" ? isBoth : (currentLevel === lvl || isBoth);
+
+                                return (
+                                  <PixelButton
+                                    key={lvl}
+                                    size="sm"
+                                    variant={isSelected ? "green" : "blue"}
+                                    onClick={() =>
+                                      setEvalSettingsMap((prev) => ({
+                                        ...prev,
+                                        [cls._id]: { ...prev[cls._id], level: lvl },
+                                      }))
+                                    }
+                                    disabled={evalSettingsMap[cls._id]?.isActive || (lvl === "both" && isBoth)}
+                                    className={lvl === "both" && isBoth ? "opacity-30 grayscale" : ""}
+                                  >
+                                    {lvl === "characters" ? "Letters" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                                  </PixelButton>
+                                );
+                              })}
                             </div>
                           </div>
 

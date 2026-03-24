@@ -18,6 +18,12 @@ export const PixelButton = forwardRef<HTMLButtonElement, PixelButtonProps>(
       learn: "bg-[#F4A942] text-foreground hover:brightness-110",
       play: "bg-[#FF8C42] text-white hover:brightness-110",
       settings: "bg-[#B24592] text-white hover:brightness-110",
+      red: "bg-[#DC3C3C] text-white hover:brightness-110",
+      green: "bg-[#58BB78] text-white hover:brightness-110",
+      blue: "bg-[#3B82F6] text-white hover:brightness-110",
+      purple: "bg-[#B24592] text-white hover:brightness-110",
+      orange: "bg-[#FF8C42] text-white hover:brightness-110",
+      yellow: "bg-[#F4A942] text-white hover:brightness-110",
     };
 
     const sizeClasses = {

@@ -68,8 +68,7 @@ export const VideoFeed = ({
 
       {/* Video feed container */}
       <div
-        className="w-full max-w-2xl rounded-lg border border-border/40 overflow-hidden bg-black/30 shadow-inner relative"
-        style={{ aspectRatio: "16 / 9" }}
+        className="w-full max-w-lg rounded-lg border border-border/40 overflow-hidden bg-black/30 shadow-inner relative aspect-video"
       >
         {mode === "calibration" ? (
           /* Calibration: render annotated base64 frames from server */
