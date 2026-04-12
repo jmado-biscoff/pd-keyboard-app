@@ -38,12 +38,12 @@ export const MetricsPanel = ({
 
       <PixelCard variant="yellow" className="p-2.5 text-center">
         <p className="font-pixel text-[9px] uppercase tracking-widest text-white/70 mb-0.5">Gross WPM</p>
-        <p className="font-pixel text-2xl text-white drop-shadow transition-all duration-300">{wpm}</p>
+        <p className="font-pixel text-2xl text-white drop-shadow transition-all duration-300">{wpm.toFixed(1)}</p>
       </PixelCard>
-
+  
       <PixelCard variant="orange" className="p-2.5 text-center">
         <p className="font-pixel text-[9px] uppercase tracking-widest text-white/70 mb-0.5">Accuracy</p>
-        <p className="font-pixel text-2xl text-white drop-shadow transition-all duration-300">{accuracy}%</p>
+        <p className="font-pixel text-2xl text-white drop-shadow transition-all duration-300">{accuracy.toFixed(1)}%</p>
       </PixelCard>
 
       <PixelCard

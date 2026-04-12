@@ -31,6 +31,7 @@ let isRunning = false;
 let animFrameId: number | null = null;
 let keyPositions: Record<string, number[]> = {};
 let callbacks: DetectionCallbacks | null = null;
+let currentTargetKey: string | null = null;
 let videoElement: HTMLVideoElement | null = null;
 let canvasElement: HTMLCanvasElement | null = null;
 let mediaStream: MediaStream | null = null;
@@ -140,6 +141,13 @@ export function stopClientDetection(): void {
 export function disposeAll(): void {
   stopClientDetection();
   disposeHandDetector();
+}
+
+/**
+ * Update the current expected target key for logging
+ */
+export function setCurrentTarget(key: string | null): void {
+  currentTargetKey = key?.toUpperCase() || null;
 }
 
 /**
@@ -307,12 +315,17 @@ function handleKeyDown(e: KeyboardEvent): void {
 
       const soundPlaying = mlLabel === "Correct" ? "click_sound" : "error_sound";
 
+      // Enhanced Logging: Differentiate Pressed vs Expected
+      const pressed = key.toUpperCase();
+      const expected = currentTargetKey || "NONE";
+      const isMatch = (pressed === expected) && (mlLabel === "Correct");
+      const matchIndicator = isMatch ? "MATCH" : "MISMATCH";
+
       console.log(
-        `[KeyPress] Key: ${key.toUpperCase()} | Finger: ${closestFinger!.name} | Hand: ${closestFinger!.hand}\n` +
-        `  Classifier:          ${mlLabel}\n` +
+        `[KeyPress] ${matchIndicator} | Pressed: [${pressed}] | Expected: [${expected}]\n` +
+        `  Finger:              ${closestFinger!.name} | Hand: ${closestFinger!.hand}\n` +
+        `  Classifier Result:   ${mlLabel}\n` +
         `  Sound Playing:       ${soundPlaying}\n` +
-        `  Model Inference time: ${inferenceMs}ms\n` +
-        `  isKey_Correct:       ${svmPred === 1}\n` +
         `  isFinger_Correct:    ${fingerCorrect}\n` +
         `  is_Hand_Correct:     ${handCorrect}`
       );

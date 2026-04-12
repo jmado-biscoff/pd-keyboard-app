@@ -217,7 +217,7 @@ export const SessionComplete = ({
         <div className="rounded-lg bg-blue-500/15 border border-blue-500/30 flex flex-col items-center justify-center py-4 min-h-[80px]">
           <p className="font-pixel text-[7px] text-blue-700 uppercase tracking-wider mb-1">Net WPM</p>
           <p className="font-pixel text-xl text-blue-600">
-            {isCalculating ? "-" : dbMetrics.netWpm}
+            {isCalculating ? "-" : dbMetrics.netWpm.toFixed(1)}
           </p>
         </div>
 

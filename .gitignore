@@ -32,3 +32,8 @@ __pycache__
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets
+backend/*.json
+!backend/package.json
+!backend/package-lock.json

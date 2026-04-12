@@ -13,6 +13,7 @@ import teacherRoutes from "./routes/teacherRoutes";
 import typingRoutes from "./routes/typingRoutes";
 import resultsRoutes from "./routes/resultsRoutes";
 import learnRoutes from "./routes/learnRoutes";
+import ocrRoutes from "./routes/ocrRoutes";
 
 // Configuration
 const app: Application = express();
@@ -38,6 +39,7 @@ app.use("/api/teacher", teacherRoutes);
 app.use("/api/typing", typingRoutes);
 app.use("/api/results", resultsRoutes);
 app.use("/api/learn", learnRoutes);
+app.use("/api/ocr", ocrRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {

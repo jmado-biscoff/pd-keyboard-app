@@ -212,7 +212,7 @@ export const analyzeSession = (
 export const formatMetricsForDatabase = (analysis: SessionAnalysis, grossWpm: number) => {
   return {
     wpm: Math.round(grossWpm),               // Integer (Gross WPM)
-    netWpm: Math.round(analysis.netWpm),     // Integer (Net WPM)
+    netWpm: parseFloat(analysis.netWpm.toFixed(1)), // 1 decimal place (Precision Update)
     accuracy: parseFloat(analysis.accuracyPercent.toFixed(1)), // 1 decimal place
     errorRate: parseFloat(analysis.errorRate.toFixed(1)),    // 1 decimal place
     compositeScore: parseFloat(analysis.compositeScore.toFixed(1)), // 1 decimal place

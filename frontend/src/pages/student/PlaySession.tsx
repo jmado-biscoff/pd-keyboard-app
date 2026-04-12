@@ -16,7 +16,9 @@ import { ArrowLeft } from "lucide-react";
 import { analyzeSession, formatMetricsForDatabase } from "@/utils/displayBrain";
 import { getCorrectionTip, getKeyColor } from "@/utils/typingHelpers";
 import { runCalibration } from "@/utils/calibrationClient";
-import { initModels, startClientDetection, stopClientDetection, disposeAll } from "@/utils/detectionOrchestrator";
+import { initModels, startClientDetection, stopClientDetection, disposeAll, setCurrentTarget } from "@/utils/detectionOrchestrator";
+import { checkIsQwerty } from "@/utils/layoutDetector";
+import { LayoutErrorModal } from "@/components/LayoutErrorModal";
 import { useAudio } from "@/contexts/AudioContext";
 import type {
   ErrorHistoryEntry,
@@ -124,6 +126,10 @@ export default function PlaySession() {
   const [sessionEnded, setSessionEnded] = useState(false);
   const [finalAnalysis, setFinalAnalysis] = useState<any>(null);
 
+  // Layout Check State
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [detectedLayout, setDetectedLayout] = useState<string>("unknown");
+
   // Error Queue State
   const [errorQueue, setErrorQueue] = useState<ErrorQueueEntry[]>([]);
   const errorIdRef = useRef(0);
@@ -131,6 +137,13 @@ export default function PlaySession() {
 
   // ML models initialization state
   const modelsInitializedRef = useRef(false);
+
+  // Sync expected key with orchestrator for logging
+  useEffect(() => {
+    const fullText = words.join("");
+    const expected = fullText[aiPointerRef.current];
+    setCurrentTarget(expected || null);
+  }, [words, currentWordIndex, userInput, timeLeft]); 
 
   const pushError = useCallback((type: ErrorQueueEntry["type"], description: string, pressedKey: string, eventSignature?: string) => {
     if (eventSignature) {
@@ -182,7 +195,7 @@ export default function PlaySession() {
             : (pauseStartTimeRef.current ?? Date.now());
           const minutesElapsed = (now - firstKeyTimeRef.current - totalPausedTimeRef.current) / 1000 / 60;
           if (minutesElapsed > 0) {
-            const grossWpm = Math.round((correctCountRef.current + incorrectCountRef.current) / (5 * minutesElapsed));
+            const grossWpm = parseFloat(((correctCountRef.current + incorrectCountRef.current) / (5 * minutesElapsed)).toFixed(1));
             setWpm(grossWpm);
           }
         }
@@ -492,7 +505,7 @@ export default function PlaySession() {
 
     const totalFingerEvents = correctCountRef.current + incorrectCountRef.current;
     // Live accuracy display uses physical key accuracy (correct letters / total events)
-    const accuracyVal = totalFingerEvents > 0 ? Math.round((correctKeysCountRef.current / totalFingerEvents) * 100) : 100;
+    const accuracyVal = totalFingerEvents > 0 ? parseFloat(((correctKeysCountRef.current / totalFingerEvents) * 100).toFixed(1)) : 100;
     setAccuracy(accuracyVal);
   }, [lastKey, completedExpected, words]);
 
@@ -558,6 +571,20 @@ export default function PlaySession() {
         },
         // onComplete
         async (keyPositions) => {
+          // Perform layout check before finishing calibration
+          const layoutCheck = await checkIsQwerty(calibVideoEl, keyPositions);
+          
+          if (!layoutCheck.isQwerty) {
+            setLayoutError(layoutCheck.reason || "Non-QWERTY layout detected.");
+            setDetectedLayout(layoutCheck.detectedLayout);
+            setIsCalibrating(false);
+            
+            // Stop calibration camera
+            stream.getTracks().forEach(t => t.stop());
+            calibVideoEl.srcObject = null;
+            return;
+          }
+
           keyPositionsRef.current = keyPositions;
           calibrationDoneRef.current = true;
           setCalibrationDone(true);
@@ -574,8 +601,6 @@ export default function PlaySession() {
             totalPausedTimeRef.current += (Date.now() - pauseStartTimeRef.current);
           }
           pauseStartTimeRef.current = null;
-
-          // Client detection will be started by useEffect after VideoFeed re-renders with detection refs
 
           // Start 10-finger initial check
           fingerCheckTimeoutRef.current = setTimeout(() => {
@@ -618,6 +643,8 @@ export default function PlaySession() {
       setIsCalibrating(true);
       calibrationDoneRef.current = false;
       setDetecting(false);
+      setLayoutError(null);
+      setDetectedLayout("unknown");
 
       stopClientDetection();
       if (calibrationStopRef.current) { calibrationStopRef.current(); calibrationStopRef.current = null; }
@@ -774,6 +801,14 @@ export default function PlaySession() {
           </div>
         </div>
       )}
+
+      <LayoutErrorModal 
+        show={!!layoutError} 
+        onRecalibrate={() => {
+          setLayoutError(null);
+          handleRecalibrate();
+        }}
+      />
 
       <FingerErrorModal show={fingerError} leftFingersCount={leftFingersCount} rightFingersCount={rightFingersCount} />
 

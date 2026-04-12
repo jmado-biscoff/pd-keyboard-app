@@ -13,7 +13,10 @@ import {
   startClientDetection,
   stopClientDetection,
   disposeAll,
+  setCurrentTarget,
 } from "@/utils/detectionOrchestrator";
+import { checkIsQwerty } from "@/utils/layoutDetector";
+import { LayoutErrorModal } from "@/components/LayoutErrorModal";
 import { useAudio } from "@/contexts/AudioContext";
 import bgVideo from "@/assets/bg2.mp4";
 
@@ -58,6 +61,7 @@ export default function LearnSession() {
   const [calibratedKeys, setCalibratedKeys] = useState<string[]>([]);
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [frame, setFrame] = useState<string | null>(null);
+  const [layoutError, setLayoutError] = useState<boolean>(false);
 
   // Feedback
   const [correctCount, setCorrectCount] = useState(0);
@@ -96,6 +100,13 @@ export default function LearnSession() {
   useEffect(() => { currentDrillIndexRef.current = currentDrillIndex; }, [currentDrillIndex]);
   useEffect(() => { currentCharIndexRef.current = currentCharIndex; }, [currentCharIndex]);
   useEffect(() => { isCalibratingRef.current = isCalibrating; }, [isCalibrating]);
+
+  // Sync expected key with orchestrator for logging
+  useEffect(() => {
+    const drill = drills[currentDrillIndex] || "";
+    const expected = drill[currentCharIndex];
+    setCurrentTarget(expected || null);
+  }, [drills, currentDrillIndex, currentCharIndex]);
 
   // Focus management
   useEffect(() => {
@@ -305,6 +316,20 @@ export default function LearnSession() {
             calibrationTimeoutRef.current = null;
           }
 
+          // Perform layout check before finishing calibration
+          const layoutCheck = await checkIsQwerty(tempVideo, keyPositions);
+          
+          if (!layoutCheck.isQwerty) {
+            setLayoutError(true);
+            setIsCalibrating(false);
+            
+            // Stop calibration camera
+            stream.getTracks().forEach((t) => t.stop());
+            tempVideo.remove();
+            calibrationStopRef.current = null;
+            return;
+          }
+
           // Stop calibration camera
           stream.getTracks().forEach((t) => t.stop());
           tempVideo.remove();
@@ -364,6 +389,7 @@ export default function LearnSession() {
 
     // Brief cool-down for clean camera release
     await new Promise((r) => setTimeout(r, 500));
+    setLayoutError(false);
     await handleStartDetection();
   };
 
@@ -452,6 +478,14 @@ export default function LearnSession() {
         showCalibrationComplete={showCalibrationComplete}
         calibrationProgress={calibrationProgress}
         calibratedKeys={calibratedKeys}
+      />
+
+      <LayoutErrorModal
+        show={layoutError}
+        onRecalibrate={() => {
+          setLayoutError(false);
+          handleRecalibrate();
+        }}
       />
 
       {/* Detection Error Overlay */}
