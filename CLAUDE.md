@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MongoDB** (running locally on port 27017 or configured in `.env`)
 - **Python 3.10+** with pip
 - **Camera access** for ML detection features
+- **Google Cloud Vision API** access (service account or API key) for OCR functionality
 
 ### Environment Setup
 
@@ -26,6 +27,12 @@ JWT_SECRET=your_jwt_secret_here
 # ML Models
 MODEL_PATH=backend/ml/notebooks/runs/train/keyboard_key_detector/weights/best.onnx
 FEATURE_CFG=backend/ml/dataset/processed/feature_config.json
+
+# Google Vision API (OCR) - Choose one authentication method:
+# Option 1: Service Account (recommended for production)
+GOOGLE_CREDENTIALS_JSON={"type":"service_account","project_id":"your-project",...}
+# Option 2: API Key (simpler for development/testing)
+GOOGLE_VISION_API_KEY=your_api_key_here
 ```
 
 ### Initial Setup
@@ -142,8 +149,7 @@ This is a monorepo typing-tutor application with three layers:
   - `teacherRoutes.ts` — create/manage classrooms, approve/reject student requests
   - `typingRoutes.ts` — returns random exercises by level (1=letters, 2=words, 3=phrases, 4=sentences) from text files in [backend/data/](backend/data/)
   - `detectionRoutes.ts` — spawns/kills the Python detection subprocess via `POST /start` and `/stop`, provides SSE stream at `GET /stream`, and accepts expected keys via `POST /expected`
-  - `resultsRoutes.ts` — save and fetch typing session results
-- **Middleware:** [backend/src/middleware/authMiddleware.ts](backend/src/middleware/authMiddleware.ts) verifies Bearer JWT tokens
+  - `resultsRoutes.ts` — save and fetch typing session results- `ocrRoutes.ts` — Google Vision API integration for OCR text extraction from images- **Middleware:** [backend/src/middleware/authMiddleware.ts](backend/src/middleware/authMiddleware.ts) verifies Bearer JWT tokens
 - CORS is configured to allow `localhost:5173`
 
 ### ML Pipeline (Python / PyTorch)
@@ -230,6 +236,15 @@ These files are tracked in git but contain temporary session data. Consider addi
 - Verify all Python dependencies are installed (see ML Dependencies section).
 - Check that hardcoded paths in `detect_keyboard_live.py` exist and point to correct model files.
 - Look for Python errors in the backend console output prefixed with `[PYTHON ERROR]`.
+
+### Google Vision API Authentication Issues
+- **Service Account** (`GOOGLE_CREDENTIALS_JSON`): Set the full JSON as an environment variable. Uses `@google-cloud/vision` client library.
+- **API Key** (`GOOGLE_VISION_API_KEY`): Simpler setup. Uses REST API directly with axios.
+- The system automatically falls back: service account JSON → API key → local file
+- Check console logs at startup for `✅ OCR Auth:` message showing which method is active
+- Ensure the service account has "Cloud Vision API User" role if using service accounts
+- Enable the Vision API in Google Cloud Console for your project
+- For API keys, restrict the key to only Vision API for security
 
 ### YOLO Model Not Found
 - Ensure YOLO weights exist at `backend/ml/notebooks/runs/train/keyboard_key_detector/weights/best.pt`
