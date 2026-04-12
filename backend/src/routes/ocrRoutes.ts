@@ -4,11 +4,22 @@ import path from "path";
 
 const router = Router();
 
-// Initialize the Google Vision client using the service account file
-// We use process.cwd() to ensure we find the file in the backend root
-const client = new ImageAnnotatorClient({
-  keyFilename: path.join(process.cwd(), "expomapapp-475414-c637430cbe92.json"),
-});
+// Initialize the Google Vision client
+// In production (Railway), we use the GOOGLE_CREDENTIALS_JSON env var string
+// In development, we fallback to the local service account file
+const clientConfig: any = {};
+
+if (process.env.GOOGLE_CREDENTIALS_JSON) {
+  try {
+    clientConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+  } catch (err) {
+    console.error("Error parsing GOOGLE_CREDENTIALS_JSON env var:", err);
+  }
+} else {
+  clientConfig.keyFilename = path.join(process.cwd(), "expomapapp-475414-c637430cbe92.json");
+}
+
+const client = new ImageAnnotatorClient(clientConfig);
 
 router.post("/parse", async (req: Request, res: Response) => {
   try {
